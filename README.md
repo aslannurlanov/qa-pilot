@@ -1,0 +1,115 @@
+# QA Pilot
+
+Manual QA test planning assistant · MVP v0.1.
+
+Stage 1 contains the project foundation, domain schemas, SQLite migration, and a
+deterministic fake provider. The home page only proves the application runs.
+
+## Local setup
+
+Prerequisites: Node.js **24 LTS**, npm, and Git. No AI key or database server is needed.
+
+```sh
+npm ci
+npm run db:generate
+npm run db:migrate
+npm run dev
+```
+
+Open <http://127.0.0.1:3000>. The default database is `data/qa-pilot.db`.
+Optionally copy `.env.example` to `.env` to customize `DATABASE_URL`. Prisma CLI
+loads `.env` using Node's built-in loader; Next.js loads it automatically.
+Relative SQLite paths resolve from the project root in both cases. Create the
+parent directory yourself if you configure a different location.
+
+```sh
+npm run typecheck
+npm run lint
+npm test
+npm run build
+```
+
+`npm test` runs domain and database integration tests without paid AI calls.
+Integration tests apply the checked-in migration to isolated temporary SQLite
+files under `.runtime/`, use the real Prisma adapter, and remove their files.
+They do not change the development database. Node's built-in SQLite module is
+used only to apply test migrations; it may emit an experimental API warning.
+
+Optional browser smoke check (one Chromium project against the production build):
+
+```sh
+npx playwright install chromium
+npm run build
+npm run test:e2e
+```
+
+Playwright owns its server on port 3100 and stops it after the test. It does not
+reuse an unrelated server. There are no CI or deployment configurations.
+
+For a new schema change, use `npm run db:migrate:dev -- --name descriptive_name`;
+commit the migration and regenerate the client with `npm run db:generate`.
+`npm run db:migrate` only applies existing migrations. There is no seed script.
+
+## Structure
+
+```text
+src/app/                 Minimal Next.js App Router page and layout
+src/domain/schemas/      Zod schemas; all domain TypeScript types use z.infer
+src/domain/rules/        Validation that needs related domain records
+src/server/ai/           Vendor-free provider contract and deterministic fixture
+src/server/services/     Validated generateTestPlan boundary
+src/server/db.ts         Prisma client factory; no import-time connection
+src/server/repositories/ Reserved for later persistence operations
+src/server/storage/      Reserved for later attachment operations
+src/components/ui/       Reserved for shared UI
+src/features/            Reserved for feature UI
+prisma/                  SQLite schema and versioned migrations
+tests/                   Unit, integration, browser tests, and synthetic fixtures
+```
+
+## Domain and validation boundaries
+
+- `TaskInput`, `TestSession`, `TestPlan`, `TestCheck`, `TestRun`, `CheckResult`,
+  `AttachmentMetadata`, and `BugReport` have strict runtime Zod schemas.
+- Plans have at most **20** checks, unique IDs and positions, required reasons,
+  and at least one nonblank step per check. Empty plans require clarification
+  questions and must not become executable in a later stage.
+- `sourceRefs` is optional. Checks have stable IDs scoped to their plan and
+  nullable `excludedAt`, so future pre-run removal can preserve identity and
+  positions. Exclusion operations and plan editing are not implemented.
+- FAIL requires `actualResult`; BLOCKED requires `reason`; PASS accepts neither
+  failure-only field. Missing results mean unexecuted checks.
+- `CheckResultsSchema` validates result uniqueness. SQLite also enforces the
+  unique `(runId, checkId)` pair and ensures run and check belong to the same plan.
+- `BugReportForResultSchema` verifies a FAIL parent, matching result ID, and no
+  existing report. SQLite enforces unique `BugReport.resultId` for concurrent
+  writes. A future write service must use this contextual validator inside its
+  transaction; a database FK alone does not prove the result is FAIL.
+- Only one plan per session and one run per plan are supported in v0.1.
+- Plans store schema/prompt versions, provider, and model. Arrays use JSON text
+  columns; persistence code must parse these values through domain schemas.
+  Domain timestamps are ISO strings; Prisma returns `Date` values.
+- `generateTestPlan(task, provider)` validates both task and response. The
+  provider interface returns `unknown` deliberately. Consumers must use this
+  boundary rather than casting an SDK or provider response to a domain type.
+- `FakeAIProvider` returns a fresh copy of the same generic username-validation
+  fixture for every valid task. It does not analyze the supplied task and is not
+  connected to the UI. No provider SDK, API call, or seed data is included.
+
+No task, plan, execution, upload, bug, or report workflow is implemented yet.
+Generated clients, databases, environment files, uploads, and test/build output
+are ignored by Git. The existing Word proposal is preserved locally and ignored
+because it predates the approved Stage 1 amendments.
+
+## Dependency notes
+
+Versions are pinned in `package.json` and `package-lock.json`. ESLint 9 is retained
+because the React/import/accessibility plugins bundled by `eslint-config-next`
+16.3.7 do not support ESLint 10. npm currently marks ESLint 9 as deprecated.
+
+The installation audit reports four high-severity entries in the Prisma 7.10.0
+dependency chain (`prisma`, `@prisma/config`, `deepmerge-ts`, `mysql2`). The two
+underlying packages are transitive, not application dependencies added directly.
+This also appears under `npm audit --omit=dev` because of Prisma's dependency/peer
+graph. npm's automatic fix proposes a Prisma 6 downgrade. No audit suppression,
+forced downgrade, or unverified major-version override has been applied.

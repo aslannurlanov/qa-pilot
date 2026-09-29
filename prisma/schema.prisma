@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum GenerationStatus {
+  IDLE
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum CheckType {
+  positive
+  negative
+  boundary
+  regression
+}
+
+enum CheckBasis {
+  requirement
+  assumption
+}
+
+enum RunStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum CheckOutcome {
+  PASS
+  FAIL
+  BLOCKED
+}
+
+model TestSession {
+  id               String           @id @default(uuid())
+  title            String
+  description      String
+  generationStatus GenerationStatus @default(IDLE)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  plan             TestPlan?
+}
+
+model TestPlan {
+  id            String      @id @default(uuid())
+  sessionId     String      @unique
+  summary       String
+  risksJson     String
+  questionsJson String
+  schemaVersion String
+  promptVersion String
+  provider      String
+  model         String
+  createdAt     DateTime    @default(now())
+  session       TestSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  checks        TestCheck[]
+  run           TestRun?
+}
+
+model TestCheck {
+  // Provider check IDs are scoped to their plan, never treated as global IDs.
+  id             String
+  planId         String
+  position       Int
+  type           CheckType
+  title          String
+  stepsJson      String
+  testDataJson   String
+  expectedResult String
+  reason         String
+  basis          CheckBasis
+  sourceRefsJson String?
+  // Future pre-run exclusion preserves the check's identity and position.
+  excludedAt     DateTime?
+  plan           TestPlan      @relation(fields: [planId], references: [id], onDelete: Restrict)
+  results        CheckResult[]
+
+  @@id([planId, id])
+  @@unique([planId, position])
+}
+
+model TestRun {
+  id          String        @id @default(uuid())
+  planId      String        @unique
+  status      RunStatus     @default(IN_PROGRESS)
+  startedAt   DateTime      @default(now())
+  completedAt DateTime?
+  plan        TestPlan      @relation(fields: [planId], references: [id], onDelete: Restrict)
+  results     CheckResult[]
+
+  // Used by the result's composite FK to prevent cross-plan results.
+  @@unique([id, planId])
+}
+
+model CheckResult {
+  id           String       @id @default(uuid())
+  runId        String
+  planId       String
+  checkId      String
+  outcome      CheckOutcome
+  actualResult String?
+  reason       String?
+  comment      String?
+  recordedAt   DateTime     @default(now())
+  run          TestRun      @relation(fields: [runId, planId], references: [id, planId], onDelete: Restrict)
+  check        TestCheck    @relation(fields: [planId, checkId], references: [planId, id], onDelete: Restrict)
+  attachments  Attachment[]
+  bug          BugReport?
+
+  @@unique([runId, checkId])
+  @@index([planId, checkId])
+}
+
+model Attachment {
+  id           String      @id @default(uuid())
+  resultId     String
+  storageKey   String      @unique
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  createdAt    DateTime    @default(now())
+  result       CheckResult @relation(fields: [resultId], references: [id], onDelete: Restrict)
+
+  @@index([resultId])
+}
+
+model BugReport {
+  id                   String      @id @default(uuid())
+  resultId             String      @unique
+  title                String
+  preconditionsJson    String
+  stepsToReproduceJson String
+  testDataJson         String
+  actualResult         String
+  expectedResult       String
+  environment          String?
+  attachmentIdsJson    String
+  createdAt            DateTime    @default(now())
+  result               CheckResult @relation(fields: [resultId], references: [id], onDelete: Restrict)
+}
