@@ -2,8 +2,41 @@
 
 Manual QA test planning assistant · MVP v0.1.
 
-Stage 1 contains the project foundation, domain schemas, SQLite migration, and a
-deterministic fake provider. The home page only proves the application runs.
+Stage 2 adds the first browser workflow: Home → New Test Session → enter a task
+→ analyze with FakeAIProvider → persist the generated plan → Test Plan Review.
+Stage 1's domain schemas and SQLite migration remain the foundation.
+
+## Current browser workflow
+
+- Home lists saved sessions with creation date and generation status. Select
+  **New Test Session** (`/sessions/new`) to start, or open an existing session.
+- Enter a task title (1–200 characters) and description (1–20,000 characters).
+  Blank or whitespace-only values are rejected by server-side Zod validation.
+- Select **Analyze Task**. The form displays progress and prevents duplicate
+  clicks while the action runs; validation and operation errors retain input.
+- The server saves the task, validates FakeAIProvider's output, and atomically
+  persists the plan, checks, metadata, and successful generation status.
+- Review the saved task, summary, risks, questions, and checks at
+  `/sessions/[sessionId]`. Each check shows its ID, type, steps, test data,
+  expected result, visible reason, and basis. Refreshing or reopening the URL
+  reads SQLite. Return home to reopen it from the saved sessions list.
+- If generation or validation fails, the saved session shows **Generation
+  failed** and **Retry analysis**. Retry uses the existing session and remains
+  safe against repeat submissions. A ready plan shows disabled **Start Testing**
+  with a Stage 3 explanation.
+- The fake always returns the same username-validation example, regardless of
+  the task. Home, input, and review pages explicitly disclose this limitation.
+
+There is no real AI analysis, execution, plan editing/exclusion, attachment,
+bug-report, authentication, or deployment workflow yet.
+Use this as a local demo; session URLs are not access-controlled.
+
+Each form has a stable session ID. Repeat submissions reuse a completed plan;
+failed analysis can retry that session. A conditional status update prevents two
+analyses of the same session from running together. Provider calls run outside
+the persistence transaction. A terminated process can leave a session RUNNING;
+automatic recovery/background jobs are deferred. Create a new session in that
+case. There is no schema change or new dependency in Stage 2.
 
 ## Local setup
 
@@ -35,7 +68,7 @@ files under `.runtime/`, use the real Prisma adapter, and remove their files.
 They do not change the development database. Node's built-in SQLite module is
 used only to apply test migrations; it may emit an experimental API warning.
 
-Optional browser smoke check (one Chromium project against the production build):
+Browser workflow checks (one Chromium project against the production build):
 
 ```sh
 npx playwright install chromium
@@ -43,8 +76,17 @@ npm run build
 npm run test:e2e
 ```
 
-Playwright owns its server on port 3100 and stops it after the test. It does not
-reuse an unrelated server. There are no CI or deployment configurations.
+Playwright owns its server on port 3100 and stops it after the tests. It does not
+reuse an unrelated server. It applies the migration before browser tests to a unique temporary SQLite
+database under `.runtime/` and removes it afterward; the development database
+is not used. Tests cover home, validation/correction, pending state, persistence
+after reload/reopen, missing sessions, and a narrow viewport. There are no CI or
+deployment configurations.
+
+The browser suite also verifies a corrupt stored plan is handled by the generic
+error page and that **Try again** re-fetches the repaired data. Test data stays in
+  the temporary browser-test database. `agentRules: false` in `next.config.ts`
+prevents the dev preview from auto-generating unrelated root agent documents.
 
 For a new schema change, use `npm run db:migrate:dev -- --name descriptive_name`;
 commit the migration and regenerate the client with `npm run db:generate`.
@@ -53,16 +95,16 @@ commit the migration and regenerate the client with `npm run db:generate`.
 ## Structure
 
 ```text
-src/app/                 Minimal Next.js App Router page and layout
+src/app/                 App Router pages, server action, loading/error states
 src/domain/schemas/      Zod schemas; all domain TypeScript types use z.infer
 src/domain/rules/        Validation that needs related domain records
 src/server/ai/           Vendor-free provider contract and deterministic fixture
-src/server/services/     Validated generateTestPlan boundary
+src/server/services/     Validated generation and session analysis workflow
 src/server/db.ts         Prisma client factory; no import-time connection
-src/server/repositories/ Reserved for later persistence operations
+src/server/repositories/ Atomic plan writes and validated review reads
 src/server/storage/      Reserved for later attachment operations
-src/components/ui/       Reserved for shared UI
-src/features/            Reserved for feature UI
+src/components/ui/       Shared demo notice
+src/features/            Task form and plan review UI
 prisma/                  SQLite schema and versioned migrations
 tests/                   Unit, integration, browser tests, and synthetic fixtures
 ```
@@ -93,10 +135,12 @@ tests/                   Unit, integration, browser tests, and synthetic fixture
   provider interface returns `unknown` deliberately. Consumers must use this
   boundary rather than casting an SDK or provider response to a domain type.
 - `FakeAIProvider` returns a fresh copy of the same generic username-validation
-  fixture for every valid task. It does not analyze the supplied task and is not
-  connected to the UI. No provider SDK, API call, or seed data is included.
+  fixture for every valid task. It does not analyze the supplied task. Stage 2
+  connects it to the form through the validated generation service. No provider
+  SDK, paid/external AI call, or seed data is included.
 
-No task, plan, execution, upload, bug, or report workflow is implemented yet.
+Task creation, generation, persistence, and plan review are implemented.
+Execution, upload, bug, and report workflows are deferred.
 Generated clients, databases, environment files, uploads, and test/build output
 are ignored by Git. The existing Word proposal is preserved locally and ignored
 because it predates the approved Stage 1 amendments.
