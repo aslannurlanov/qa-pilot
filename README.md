@@ -2,9 +2,9 @@
 
 Manual QA test planning assistant · MVP v0.1.
 
-Stage 5 adds optional OpenAI test-plan generation while preserving offline fake mode:
+Stage 6 completes the core workflow with a deterministic read-only final testing report:
 Home → new test session → analyze with the selected AIProvider → review the saved plan →
-execute checks → review results → create and copy a report for a failed check.
+execute checks → review results → explicitly create BugReports for failures → review and copy the final testing report.
 
 ## Current browser workflow
 
@@ -40,6 +40,30 @@ execute checks → review results → create and copy a report for a failed chec
   the task. Home and input pages disclose the active generation mode. Saved plan
   review uses persisted provider metadata, so configuration changes never relabel
   an old fake plan as a real AI plan.
+
+## Final testing report
+
+After completing a manual run, select **Открыть отчёт о тестировании** or the secondary
+report link on Home. `/sessions/[sessionId]/run/report` shows task/plan context, the
+start and completion dates, ordered check outcomes, FAIL details, blocking reasons,
+QA comments, and links to existing BugReports. Missing BugReports are explicitly
+labelled; creating them is still a separate explicit action in the execution summary.
+**Скопировать отчёт** provides deterministic Russian plain text with a manual-copy
+fallback when clipboard access is unavailable.
+
+This report is derived from current persisted records, not a saved snapshot. Reading,
+refreshing, reopening, or copying it performs no application writes, AI calls, or
+external requests. A BugReport explicitly created later appears on refresh. Reads
+use the existing scoped queries in a read transaction, without per-BugReport queries.
+No new Prisma schema, migration, report table, or dependency is required.
+
+Only a valid completed run with exactly one result per executable check is eligible.
+Excluded checks are outside the executable scope. Missing/unfinished runs do not show
+a final report; inconsistent persisted data shows a safe Russian error state. BLOCKED
+counts as recorded, never as passed. Conclusions describe only outcomes within this
+plan; there is no pass-rate percentage or claim of release readiness/full coverage.
+Saved risks/questions are planning context, not confirmed defects or resolved questions.
+Tester identity, tested build, environment, severity, and missing answers are not invented.
 
 There is no plan editing/exclusion, result editing, attachment,
 bug-report editing, authentication, or deployment workflow yet.
@@ -205,7 +229,7 @@ tests/                   Unit, integration, browser tests, and synthetic fixture
   a lazy provider factory and an isolated OpenAI adapter; no seed data is included.
 
 Task creation, generation, persistence, plan review, manual execution, and
-deterministic bug reports are implemented. Upload workflows are deferred.
+deterministic bug reports, and final testing reports are implemented. Upload workflows are deferred.
 Generated clients, databases, environment files, uploads, and test/build output
 are ignored by Git. The existing Word proposal is preserved locally and ignored
 because it predates the approved Stage 1 amendments.

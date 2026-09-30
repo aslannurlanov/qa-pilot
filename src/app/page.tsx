@@ -49,6 +49,7 @@ export default async function HomePage() {
                   </div>
                   <p className="mt-2 text-sm text-slate-500">Создана: <LocalDateTime value={session.createdAt} /></p>
                 </Link>
+                {session.runStatus === "COMPLETED" && <Link href={`/sessions/${session.id}/run/report`} className="mt-2 inline-block text-sm font-medium text-indigo-700 underline" aria-label={`Отчёт о тестировании: ${session.title}`}>Отчёт о тестировании</Link>}
               </li>
             ))}
           </ul>

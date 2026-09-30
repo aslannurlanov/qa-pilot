@@ -58,6 +58,7 @@ export default async function RunPage({ params }: { params: Promise<{ sessionId:
                 <div key={label} className="rounded-xl bg-slate-50 p-4"><dt className="text-sm text-slate-600">{label}</dt><dd className="mt-1 text-2xl font-semibold">{value}</dd></div>
               ))}
             </dl>
+            <Link href={`/sessions/${sessionId}/run/report`} className="button-primary mt-6 inline-block">Открыть отчёт о тестировании</Link>
           </section>
           <section className="mt-8" aria-labelledby="results-title">
             <h2 id="results-title" className="section-title">Записанные результаты</h2>

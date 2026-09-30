@@ -32,7 +32,7 @@ function isUniqueConflict(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
 }
 
-export async function getExecution(db: PrismaClient, sessionId: string) {
+export async function getExecution(db: Pick<PrismaClient, "testSession" | "testRun">, sessionId: string) {
   const review = await findSessionReview(db, sessionId);
   if (!review?.plan) return null;
   const stored = await db.testRun.findUnique({

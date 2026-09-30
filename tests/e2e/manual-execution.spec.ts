@@ -75,6 +75,16 @@ test("manual execution survives refresh and resume, validates details, and compl
   await page.getByRole("link", { name: `Посмотреть результаты: ${usernameTask.title}` }).click();
   await expect(page.getByRole("heading", { name: "Тестирование завершено" })).toBeVisible();
 
+  await page.getByRole("link", { name: "Открыть отчёт о тестировании" }).click();
+  await expect(page).toHaveURL(`/sessions/${sessionId}/run/report`);
+  const reportUrl = page.url();
+  await expect(page.getByRole("heading", { name: "Отчёт о тестировании", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Итоги", exact: true }).getByRole("definition")).toHaveText(["4", "2", "1", "1"]);
+  await expect(page.getByRole("region", { name: "Ошибки", exact: true })).toContainText("Имя пользователя принято без проверки длины.");
+  await expect(page.getByRole("region", { name: "Ошибки", exact: true })).toContainText("Баг-репорт не создан");
+  await expect(page.getByRole("region", { name: "Блокировки", exact: true })).toContainText("Тестовая среда недоступна.");
+  await page.getByRole("navigation", { name: "Навигация по отчёту" }).getByRole("link", { name: "Результаты тестирования" }).click();
+
   const resultCards = page.getByRole("region", { name: "Записанные результаты" }).getByRole("listitem");
   await expect(resultCards.filter({ hasText: "ПРОЙДЕНО" }).getByRole("button", { name: "Создать баг-репорт" })).toHaveCount(0);
   await expect(resultCards.filter({ hasText: "ЗАБЛОКИРОВАНО" }).getByRole("button", { name: "Создать баг-репорт" })).toHaveCount(0);
@@ -104,6 +114,24 @@ test("manual execution survives refresh and resume, validates details, and compl
   await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async () => { throw new Error("Clipboard denied"); } } }));
   await page.getByRole("button", { name: "Скопировать баг-репорт" }).click();
   await expect(page.getByLabel("Текст баг-репорта")).toHaveValue(/Имя пользователя принято без проверки длины/);
+
+  await page.goto(reportUrl);
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Ошибки", exact: true }).getByRole("link", { name: "Открыть баг-репорт" })).toHaveAttribute("href", new URL(bugUrl).pathname);
+  await page.getByRole("button", { name: "Скопировать отчёт", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("status")).toHaveText("Отчёт скопирован");
+  const reportText = await page.evaluate(() => navigator.clipboard.readText());
+  expect(reportText.replaceAll("\r\n", "\n")).toContain("Всего проверок: 4\nПройдено: 2\nОшибок: 1\nЗаблокировано: 1");
+  expect(reportText).toContain("Тестовая среда недоступна.");
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined }));
+  await page.getByRole("button", { name: "Скопировать отчёт", exact: true }).click();
+  await expect(page.getByLabel("Текст отчёта", { exact: true })).toHaveValue(/Комментарий:\nПовторено в Chrome/);
+  await page.getByRole("region", { name: "Ошибки", exact: true }).getByRole("link", { name: "Открыть баг-репорт" }).click();
+  await expect(page).toHaveURL(bugUrl);
+  await page.goto("/");
+  await page.getByRole("link", { name: `Отчёт о тестировании: ${usernameTask.title}` }).click();
+  await expect(page).toHaveURL(reportUrl);
+  await expect(page.getByRole("region", { name: "Итоги", exact: true }).getByRole("definition")).toHaveText(["4", "2", "1", "1"]);
 
   const path = process.env.QA_PILOT_E2E_DATABASE;
   if (!path) throw new Error("Missing isolated browser-test database.");

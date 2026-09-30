@@ -58,7 +58,7 @@ export async function saveGeneratedPlan(db: PrismaClient, sessionId: string, pla
   });
 }
 
-export async function findSessionReview(db: PrismaClient, id: string) {
+export async function findSessionReview(db: Pick<PrismaClient, "testSession">, id: string) {
   if (!IdSchema.safeParse(id).success) return null;
   const record = await db.testSession.findUnique({
     where: { id },
