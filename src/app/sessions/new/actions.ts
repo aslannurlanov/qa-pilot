@@ -3,7 +3,8 @@
 import { redirect } from "next/navigation";
 import { IdSchema, TaskInputSchema } from "@/domain/schemas";
 import type { TaskFormState } from "@/features/test-sessions/form-state";
-import { FakeAIProvider } from "@/server/ai/fake-ai-provider";
+import { createAIProvider } from "@/server/ai/create-provider";
+import { generationErrorCode } from "@/server/ai/generation-errors";
 import { createDatabaseClient } from "@/server/db";
 import { findTestSession } from "@/server/repositories/test-sessions";
 import { AnalysisInProgressError, analyzeTestSession } from "@/server/services/analyze-test-session";
@@ -27,12 +28,12 @@ export async function analyzeTask(_previous: TaskFormState, formData: FormData):
   const db = createDatabaseClient();
   let destination: string | undefined;
   try {
-    const sessionId = await analyzeTestSession(db, new FakeAIProvider(), id.data, input.data);
+    const sessionId = await analyzeTestSession(db, createAIProvider(), id.data, input.data);
     destination = `/sessions/${sessionId}`;
   } catch (error) {
     const session = await findTestSession(db, id.data);
     if (session?.generationStatus === "FAILED" || session?.generationStatus === "RUNNING") {
-      destination = `/sessions/${id.data}`;
+      destination = `/sessions/${id.data}${session.generationStatus === "FAILED" ? `?generationError=${generationErrorCode(error)}` : ""}`;
     } else {
       return {
         message: error instanceof AnalysisInProgressError

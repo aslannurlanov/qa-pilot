@@ -9,6 +9,9 @@ import { createDatabaseClient } from "@/server/db";
 import { findSessionReview, findTestSession, listTestSessions } from "@/server/repositories/test-sessions";
 import { AnalysisInProgressError, analyzeTestSession } from "@/server/services/analyze-test-session";
 import { applyTestMigrations } from "../helpers/sqlite";
+import { OpenAIProvider } from "@/server/ai/openai-provider";
+import { createAIProvider } from "@/server/ai/create-provider";
+import { responseBody, jsonResponse, wirePlan } from "../fixtures/openai-responses";
 
 let db: PrismaClient;
 let directory: string;
@@ -24,11 +27,58 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await db.$disconnect();
   rmSync(directory, { recursive: true, force: true });
 });
 
 describe("task analysis and persisted plan review", () => {
+  it.each([
+    ["Zod-invalid", { ...wirePlan(), summary: "" }],
+    ["duplicate IDs", { ...wirePlan(), checks: wirePlan().checks.map((check) => ({ ...check, id: "same" })) }],
+    ["duplicate positions", { ...wirePlan(), checks: wirePlan().checks.map((check) => ({ ...check, position: 0 })) }],
+    ["too many checks", { ...wirePlan(), checks: Array.from({ length: 21 }, (_, position) => ({ ...wirePlan().checks[0]!, id: `check-${position}`, position })) }],
+  ])("persists no partial plan for mocked OpenAI %s output", async (_name, wire) => {
+    vi.stubEnv("OPENAI_API_KEY", "test-placeholder-never-a-real-key");
+    vi.stubEnv("OPENAI_MODEL", "gpt-5.4-mini");
+    const transport = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(responseBody(wire)));
+    await expect(analyzeTestSession(db, new OpenAIProvider(transport), id, usernameTask)).rejects.toMatchObject({ code: "invalid_output" });
+    expect(await db.testPlan.count()).toBe(0);
+    expect(await db.testCheck.count()).toBe(0);
+    expect((await findTestSession(db, id))?.generationStatus).toBe("FAILED");
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a failed mocked OpenAI attempt and preserves provenance when mode changes", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "test-placeholder-never-a-real-key");
+    vi.stubEnv("OPENAI_MODEL", "gpt-5.4-mini");
+    const transport = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ error: { message: "Unavailable" } }, 503))
+      .mockResolvedValueOnce(jsonResponse(responseBody()));
+    const provider = new OpenAIProvider(transport);
+    await expect(analyzeTestSession(db, provider, id, usernameTask)).rejects.toMatchObject({ code: "server" });
+    expect(await db.testPlan.count()).toBe(0);
+    await analyzeTestSession(db, provider, id, usernameTask);
+    vi.stubEnv("AI_PROVIDER", "fake");
+    const review = await findSessionReview(db, id);
+    expect(review?.plan?.metadata).toMatchObject({ provider: "openai", model: "gpt-5.4-mini", promptVersion: "qa-plan-v1" });
+    await analyzeTestSession(db, provider, id, usernameTask);
+    expect(transport).toHaveBeenCalledTimes(2);
+    expect(await db.testPlan.count()).toBe(1);
+  });
+
+  it("saves configuration failure and reuses a successful fake plan without requiring OpenAI credentials", async () => {
+    vi.stubEnv("AI_PROVIDER", "openai");
+    vi.stubEnv("OPENAI_API_KEY", "");
+    await expect(analyzeTestSession(db, createAIProvider(), id, usernameTask)).rejects.toMatchObject({ code: "configuration" });
+    expect((await findTestSession(db, id))?.generationStatus).toBe("FAILED");
+    vi.stubEnv("AI_PROVIDER", "fake");
+    await analyzeTestSession(db, createAIProvider(), id, usernameTask);
+    vi.stubEnv("AI_PROVIDER", "openai");
+    await analyzeTestSession(db, createAIProvider(), id, usernameTask);
+    expect((await findSessionReview(db, id))?.plan?.metadata.provider).toBe("fake");
+    expect(await db.testPlan.count()).toBe(1);
+  });
   it("saves the trimmed task and complete validated plan and reads it through a new connection", async () => {
     const provider = new FakeAIProvider();
     const generate = vi.spyOn(provider, "generateTestPlan");

@@ -5,15 +5,21 @@ import { PlanReview } from "@/features/test-sessions/plan-review";
 import { RetryForm } from "@/features/test-sessions/retry-form";
 import { createDatabaseClient } from "@/server/db";
 import { findSessionReview } from "@/server/repositories/test-sessions";
+import { getProviderDisclosure } from "@/server/config";
+import { generationMessage } from "@/server/ai/generation-errors";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export default async function SessionPage({ params }: { params: Promise<{ sessionId: string }> }) {
+export default async function SessionPage({ params, searchParams }: {
+  params: Promise<{ sessionId: string }>;
+  searchParams: Promise<{ generationError?: string | string[] }>;
+}) {
   const { sessionId } = await params;
   const db = createDatabaseClient();
   const review = await findSessionReview(db, sessionId).finally(() => db.$disconnect());
   if (!review) notFound();
+  const message = generationMessage((await searchParams).generationError);
 
   return (
     <main className="page-shell">
@@ -21,7 +27,7 @@ export default async function SessionPage({ params }: { params: Promise<{ sessio
       <p className="eyebrow mt-6">Проверка</p>
       <h1 className="page-title">План тестирования</h1>
       <p className="mb-6 mt-3 text-slate-600">Изучите задачу, риски, вопросы и причины включения каждой проверки.</p>
-      <DemoNotice />
+      <DemoNotice provider={review.plan?.metadata.provider ?? getProviderDisclosure()} />
       <section className="panel my-6" aria-labelledby="saved-task-title">
         <p className="eyebrow">Исходная задача</p>
         <h2 id="saved-task-title" className="mt-2 text-xl font-semibold">{review.session.title}</h2>
@@ -33,6 +39,7 @@ export default async function SessionPage({ params }: { params: Promise<{ sessio
         <section className="panel" aria-labelledby="generation-failed-title">
           <h2 id="generation-failed-title" className="section-title">Ошибка анализа</h2>
           <p className="mt-3 text-slate-600">Не удалось создать корректный план. Задача сохранена, а неполный план не записан.</p>
+          {message && <p role="alert" className="mt-3 text-sm text-red-700">{message}</p>}
           <RetryForm sessionId={review.session.id} />
         </section>
       ) : (

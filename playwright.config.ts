@@ -27,6 +27,6 @@ export default defineConfig({
     url: `${baseURL}/sessions/new`,
     reuseExistingServer: false,
     timeout: 60_000,
-    env: { DATABASE_URL: `file:${databasePath.replaceAll("\\", "/")}` },
+    env: { DATABASE_URL: `file:${databasePath.replaceAll("\\", "/")}`, AI_PROVIDER: "fake", OPENAI_API_KEY: "" },
   },
 });

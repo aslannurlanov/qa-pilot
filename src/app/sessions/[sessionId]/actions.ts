@@ -2,7 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { IdSchema } from "@/domain/schemas";
-import { FakeAIProvider } from "@/server/ai/fake-ai-provider";
+import { createAIProvider } from "@/server/ai/create-provider";
+import { generationErrorCode, generationMessage } from "@/server/ai/generation-errors";
 import { createDatabaseClient } from "@/server/db";
 import { findTestSession } from "@/server/repositories/test-sessions";
 import { AnalysisInProgressError, analyzeTestSession } from "@/server/services/analyze-test-session";
@@ -18,12 +19,12 @@ export async function retryAnalysis(_previous: RetryState, formData: FormData): 
     const session = await findTestSession(db, id.data);
     if (!session) return { message: "Проверка не найдена. Вернитесь на главную страницу и откройте её снова." };
     if (session.generationStatus === "RUNNING") return { message: "Анализ уже идёт. Обновите страницу через некоторое время." };
-    await analyzeTestSession(db, new FakeAIProvider(), id.data, { title: session.title, description: session.description });
+    await analyzeTestSession(db, createAIProvider(), id.data, { title: session.title, description: session.description });
   } catch (error) {
     return {
       message: error instanceof AnalysisInProgressError
         ? "Анализ уже идёт. Обновите страницу через некоторое время."
-        : "Повторный анализ не удался. Проверка сохранена — можно попробовать ещё раз.",
+        : generationMessage(generationErrorCode(error)),
     };
   } finally {
     await db.$disconnect();

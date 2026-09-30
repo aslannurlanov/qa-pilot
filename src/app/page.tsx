@@ -3,6 +3,7 @@ import { DemoNotice } from "@/components/ui/demo-notice";
 import { LocalDateTime } from "@/components/ui/local-date-time";
 import { createDatabaseClient } from "@/server/db";
 import { listTestSessions } from "@/server/repositories/test-sessions";
+import { getProviderDisclosure } from "@/server/config";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,7 +28,7 @@ export default async function HomePage() {
         </div>
         <Link href="/sessions/new" className="button-primary">Новая проверка</Link>
       </div>
-      <div className="mt-8"><DemoNotice /></div>
+      <div className="mt-8"><DemoNotice provider={getProviderDisclosure()} /></div>
       <section className="mt-10" aria-labelledby="sessions-title">
         <h2 id="sessions-title" className="section-title">Сохранённые проверки</h2>
         {sessions.length === 0 ? (

@@ -157,6 +157,10 @@ test("failed and generating sessions appear on Home; Retry reuses the failed ses
     await page.getByRole("link", { name: "Открыть проверку: Повторить эту задачу" }).click();
     await expect(page.getByRole("heading", { name: "Ошибка анализа" })).toBeVisible();
     await expect(page.getByText("Не удалось создать корректный план. Задача сохранена, а неполный план не записан.")).toBeVisible();
+    await page.goto(`/sessions/${failedId}?generationError=configuration`);
+    await expect(page.getByRole("main").getByRole("alert")).toHaveText("Для AI-анализа не настроен доступ. Обратитесь к администратору.");
+    await page.goto(`/sessions/${failedId}?generationError=untrusted-payload`);
+    await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
     await page.getByRole("button", { name: "Повторить анализ" }).click();
     await expect(page).toHaveURL(`/sessions/${failedId}`);
     await expect(page.getByRole("article")).toHaveCount(4);
@@ -164,8 +168,14 @@ test("failed and generating sessions appear on Home; Retry reuses the failed ses
     expect(database.prepare('SELECT count(*) AS count FROM TestSession WHERE id = ?').get(failedId)).toMatchObject({ count: 1 });
     expect(database.prepare('SELECT count(*) AS count FROM TestPlan WHERE sessionId = ?').get(failedId)).toMatchObject({ count: 1 });
     expect(database.prepare('SELECT count(*) AS count FROM TestCheck WHERE planId = (SELECT id FROM TestPlan WHERE sessionId = ?)').get(failedId)).toMatchObject({ count: 4 });
+    // Synthetic provenance change verifies a saved plan's disclosure ignores active fake mode.
+    database.prepare('UPDATE TestPlan SET provider = ?, model = ? WHERE sessionId = ?').run("openai", "gpt-5.4-mini", failedId);
+    await page.reload();
+    await expect(page.getByRole("complementary", { name: "AI-анализ" })).toBeVisible();
+    await expect(page.getByRole("complementary", { name: "Демонстрационный анализ" })).toHaveCount(0);
     await page.getByRole("link", { name: "На главную" }).click();
     await expect(page.getByRole("link", { name: "Открыть проверку: Повторить эту задачу" })).toContainText("Готово");
+    await expect(page.getByRole("complementary", { name: "Демонстрационный анализ" })).toBeVisible();
   } finally {
     database.close();
   }

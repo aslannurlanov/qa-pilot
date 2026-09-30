@@ -2,8 +2,8 @@
 
 Manual QA test planning assistant · MVP v0.1.
 
-Stage 4 adds explicit deterministic bug reports to the manual execution workflow:
-Home → new test session → analyze with FakeAIProvider → review the saved plan →
+Stage 5 adds optional OpenAI test-plan generation while preserving offline fake mode:
+Home → new test session → analyze with the selected AIProvider → review the saved plan →
 execute checks → review results → create and copy a report for a failed check.
 
 ## Current browser workflow
@@ -14,7 +14,7 @@ execute checks → review results → create and copy a report for a failed chec
   Blank or whitespace-only values are rejected by server-side Zod validation.
 - Select **Analyze Task**. The form displays progress and prevents duplicate
   clicks while the action runs; validation and operation errors retain input.
-- The server saves the task, validates FakeAIProvider's output, and atomically
+- The server saves the task, validates the selected provider's output, and atomically
   persists the plan, checks, metadata, and successful generation status.
 - Review the saved task, summary, risks, questions, and checks at
   `/sessions/[sessionId]`. Each check shows its ID, type, steps, test data,
@@ -37,9 +37,11 @@ execute checks → review results → create and copy a report for a failed chec
   never regenerated on reads. **Скопировать баг-репорт** copies plain text, with
   a manual-copy fallback when the browser refuses clipboard access.
 - The fake always returns the same username-validation example, regardless of
-  the task. Home, input, and review pages explicitly disclose this limitation.
+  the task. Home and input pages disclose the active generation mode. Saved plan
+  review uses persisted provider metadata, so configuration changes never relabel
+  an old fake plan as a real AI plan.
 
-There is no real AI analysis, plan editing/exclusion, result editing, attachment,
+There is no plan editing/exclusion, result editing, attachment,
 bug-report editing, authentication, or deployment workflow yet.
 Use this as a local demo; session URLs are not access-controlled.
 
@@ -48,11 +50,11 @@ failed analysis can retry that session. A conditional status update prevents two
 analyses of the same session from running together. Provider calls run outside
 the persistence transaction. A terminated process can leave a session RUNNING;
 automatic recovery/background jobs are deferred. Create a new session in that
-case. There is no schema change or new dependency in Stage 2.
+case. Stage 5 retains this limitation; it does not add stale-attempt recovery.
 
 ## Local setup
 
-Prerequisites: Node.js **24 LTS**, npm, and Git. No AI key or database server is needed.
+Prerequisites: Node.js **24 LTS**, npm, and Git. Fake mode needs no AI key or database server.
 
 ```sh
 npm ci
@@ -67,6 +69,48 @@ loads `.env` using Node's built-in loader; Next.js loads it automatically.
 Relative SQLite paths resolve from the project root in both cases. Create the
 parent directory yourself if you configure a different location.
 
+## AI provider configuration
+
+Fake mode is the default when `AI_PROVIDER` is unset, and never calls an external API:
+
+```dotenv
+AI_PROVIDER=fake
+```
+
+For real generation, configure these variables in your server environment or an
+untracked local `.env` file, then restart the application:
+
+```dotenv
+AI_PROVIDER=openai
+OPENAI_API_KEY=<server-side secret>
+OPENAI_MODEL=gpt-5.4-mini
+```
+
+Never commit a real API key or expose it through `NEXT_PUBLIC_*`. Only the secret-free
+`.env.example` is tracked. OpenAI credentials/model are required only when an attempt
+actually needs OpenAI. Unknown providers fail explicitly; failures never fall back to fake.
+SDK logging is disabled; the adapter uses the official OpenAI endpoint.
+
+Real mode sends the submitted task title and description to OpenAI and incurs API
+usage costs. No repository, previous session, external tools, or project knowledge is
+sent. Generated content is Russian; assumptions and missing information remain visible
+for manual review. Real AI quality has not yet been evaluated with live requests.
+
+The official SDK uses Responses API `responses.parse` with `zodTextFormat` and a strict
+wire schema. The adapter assigns trusted metadata (`schemaVersion=1`,
+`promptVersion=qa-plan-v1`, provider/model), normalizes nullable source labels, and
+validates with the existing domain schema. The application validates again before
+atomic persistence. Invalid/incomplete/refused responses never create a partial plan.
+The prompt requests empty source references because no external sources are verified.
+
+Each claimed explicit attempt makes at most one request: a 60-second abort deadline,
+zero SDK retries, maximum 4,000 output tokens, and at most 20 checks. Retry is explicit;
+there is no repair request, model fallback, or automatic regeneration. Opening plans,
+manual execution, and deterministic BugReports never call AI. A successful session
+reuses its stored plan. Initial failure redirects carry only an allowlisted error code;
+reopening from Home shows the generic saved failure state. Detailed errors are not
+stored in the database.
+
 ```sh
 npm run typecheck
 npm run lint
@@ -75,6 +119,9 @@ npm run build
 ```
 
 `npm test` runs domain and database integration tests without paid AI calls.
+Vitest forces fake mode, removes the API key, and blocks global network fetch. OpenAI
+adapter tests inject mocked fetch responses while exercising the real SDK parser.
+Playwright explicitly sets `AI_PROVIDER=fake` and an empty key for its application server.
 Integration tests apply the checked-in migration to isolated temporary SQLite
 files under `.runtime/`, use the real Prisma adapter, and remove their files.
 They do not change the development database. Node's built-in SQLite module is
@@ -154,8 +201,8 @@ tests/                   Unit, integration, browser tests, and synthetic fixture
   boundary rather than casting an SDK or provider response to a domain type.
 - `FakeAIProvider` returns a fresh copy of the same generic username-validation
   fixture for every valid task. It does not analyze the supplied task. Stage 2
-  connects it to the form through the validated generation service. No provider
-  SDK, paid/external AI call, or seed data is included.
+  connects it to the form through the validated generation service. Stage 5 adds
+  a lazy provider factory and an isolated OpenAI adapter; no seed data is included.
 
 Task creation, generation, persistence, plan review, manual execution, and
 deterministic bug reports are implemented. Upload workflows are deferred.
