@@ -58,8 +58,7 @@ test("home to task analysis to a persisted plan review", async ({ page, context 
     for (const data of check.testData) await expect(article).toContainText(data);
   }
   await expect(page.getByText("Провайдер: fake", { exact: false })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Начать тестирование" })).toBeDisabled();
-  await expect(page.getByText("Будет доступно на следующем этапе.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Начать тестирование" })).toBeEnabled();
   const url = page.url();
   await page.reload();
   await expect(page.getByRole("article")).toHaveCount(4);
@@ -161,7 +160,7 @@ test("failed and generating sessions appear on Home; Retry reuses the failed ses
     await page.getByRole("button", { name: "Повторить анализ" }).click();
     await expect(page).toHaveURL(`/sessions/${failedId}`);
     await expect(page.getByRole("article")).toHaveCount(4);
-    await expect(page.getByRole("button", { name: "Начать тестирование" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Начать тестирование" })).toBeEnabled();
     expect(database.prepare('SELECT count(*) AS count FROM TestSession WHERE id = ?').get(failedId)).toMatchObject({ count: 1 });
     expect(database.prepare('SELECT count(*) AS count FROM TestPlan WHERE sessionId = ?').get(failedId)).toMatchObject({ count: 1 });
     expect(database.prepare('SELECT count(*) AS count FROM TestCheck WHERE planId = (SELECT id FROM TestPlan WHERE sessionId = ?)').get(failedId)).toMatchObject({ count: 4 });

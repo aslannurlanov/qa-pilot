@@ -28,7 +28,7 @@ export default async function SessionPage({ params }: { params: Promise<{ sessio
         <p className="mt-3 whitespace-pre-wrap wrap-break-word text-slate-600">{review.session.description}</p>
       </section>
       {review.session.generationStatus === "SUCCEEDED" && review.plan ? (
-        <PlanReview plan={review.plan} />
+        <PlanReview plan={review.plan} hasRun={review.hasRun} />
       ) : review.session.generationStatus === "FAILED" ? (
         <section className="panel" aria-labelledby="generation-failed-title">
           <h2 id="generation-failed-title" className="section-title">Ошибка анализа</h2>

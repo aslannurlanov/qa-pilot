@@ -39,11 +39,11 @@ export default async function HomePage() {
           <ul className="mt-4 space-y-3">
             {sessions.map((session) => (
               <li key={session.id}>
-                <Link href={`/sessions/${session.id}`} className="block rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-indigo-400 focus-visible:outline-2 focus-visible:outline-indigo-600 sm:p-6" aria-label={`Открыть проверку: ${session.title}`}>
+                <Link href={session.runStatus ? `/sessions/${session.id}/run` : `/sessions/${session.id}`} className="block rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-indigo-400 focus-visible:outline-2 focus-visible:outline-indigo-600 sm:p-6" aria-label={`${session.runStatus === "COMPLETED" ? "Посмотреть результаты" : session.runStatus ? "Продолжить тестирование" : "Открыть проверку"}: ${session.title}`}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <h3 className="text-lg font-semibold text-slate-900">{session.title}</h3>
                     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${session.generationStatus === "SUCCEEDED" ? "bg-emerald-50 text-emerald-800" : session.generationStatus === "FAILED" ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-900"}`}>
-                      {statusLabels[session.generationStatus]}
+                      {session.runStatus === "COMPLETED" ? "Тестирование завершено" : session.runStatus ? "Тестирование идёт" : statusLabels[session.generationStatus]}
                     </span>
                   </div>
                   <p className="mt-2 text-sm text-slate-500">Создана: <LocalDateTime value={session.createdAt} /></p>

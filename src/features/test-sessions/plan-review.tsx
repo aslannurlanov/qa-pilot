@@ -1,4 +1,6 @@
 import type { CheckType, TestCheck, TestPlan } from "@/domain/schemas";
+import Link from "next/link";
+import { startTesting } from "@/app/sessions/[sessionId]/run/actions";
 
 const checkTypeLabels: Record<CheckType, string> = {
   positive: "Позитивный",
@@ -18,7 +20,7 @@ function TextList({ items, empty }: { items: string[]; empty: string }) {
   );
 }
 
-export function PlanReview({ plan }: { plan: TestPlan }) {
+export function PlanReview({ plan, hasRun }: { plan: TestPlan; hasRun: boolean }) {
   return (
     <div className="space-y-6">
       <section className="panel" aria-labelledby="summary-title">
@@ -72,8 +74,14 @@ export function PlanReview({ plan }: { plan: TestPlan }) {
         ))}
       </section>
       <div className="panel">
-        <button type="button" disabled className="button-primary">Начать тестирование</button>
-        <p className="mt-3 text-sm text-slate-600">Будет доступно на следующем этапе.</p>
+        {hasRun ? (
+          <Link href={`/sessions/${plan.sessionId}/run`} className="button-primary">Открыть тестирование</Link>
+        ) : plan.checks.some((check) => check.excludedAt === null) ? (
+          <form action={startTesting}>
+            <input type="hidden" name="sessionId" value={plan.sessionId} />
+            <button type="submit" className="button-primary">Начать тестирование</button>
+          </form>
+        ) : <p className="text-sm text-slate-600">В плане нет проверок для выполнения.</p>}
       </div>
       <p className="text-xs text-slate-500">Провайдер: {plan.metadata.provider} · Модель: {plan.metadata.model} · Версия схемы: {plan.metadata.schemaVersion} · Версия шаблона: {plan.metadata.promptVersion}</p>
     </div>

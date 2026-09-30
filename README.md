@@ -2,9 +2,10 @@
 
 Manual QA test planning assistant · MVP v0.1.
 
-Stage 2 adds the first browser workflow: Home → New Test Session → enter a task
-→ analyze with FakeAIProvider → persist the generated plan → Test Plan Review.
-Stage 1's domain schemas and SQLite migration remain the foundation.
+Stage 3 adds manual execution to the existing browser workflow: Home → new test
+session → analyze with FakeAIProvider → review the saved plan → execute checks
+one at a time → review the final result. The original SQLite schema supports
+this flow without a new migration.
 
 ## Current browser workflow
 
@@ -20,14 +21,19 @@ Stage 1's domain schemas and SQLite migration remain the foundation.
   `/sessions/[sessionId]`. Each check shows its ID, type, steps, test data,
   expected result, visible reason, and basis. Refreshing or reopening the URL
   reads SQLite. Return home to reopen it from the saved sessions list.
-- If generation or validation fails, the saved session shows **Generation
-  failed** and **Retry analysis**. Retry uses the existing session and remains
-  safe against repeat submissions. A ready plan shows disabled **Start Testing**
-  with a Stage 3 explanation.
+- If generation or validation fails, the saved session offers a retry using the
+  existing session. On a ready plan, **Начать тестирование** creates or resumes
+  its single run. The execution page shows one unresolved check at a time,
+  including steps, test data, expected result, and reason.
+- Record **ПРОЙДЕНО** immediately, or provide a required actual result for
+  **ОШИБКА** or a required blocking reason for **ЗАБЛОКИРОВАНО**. The latter two
+  can include an optional comment. Results and progress are stored in SQLite;
+  refresh and Home navigation resume the first unresolved check. When all
+  checks are recorded, the page shows totals and each saved outcome.
 - The fake always returns the same username-validation example, regardless of
   the task. Home, input, and review pages explicitly disclose this limitation.
 
-There is no real AI analysis, execution, plan editing/exclusion, attachment,
+There is no real AI analysis, plan editing/exclusion, result editing, attachment,
 bug-report, authentication, or deployment workflow yet.
 Use this as a local demo; session URLs are not access-controlled.
 
@@ -80,12 +86,12 @@ Playwright owns its server on port 3100 and stops it after the tests. It does no
 reuse an unrelated server. It applies the migration before browser tests to a unique temporary SQLite
 database under `.runtime/` and removes it afterward; the development database
 is not used. Tests cover home, validation/correction, pending state, persistence
-after reload/reopen, missing sessions, and a narrow viewport. There are no CI or
-deployment configurations.
+after reload/reopen, missing sessions, manual execution and completion, and a
+narrow viewport. There are no CI or deployment configurations.
 
 The browser suite also verifies a corrupt stored plan is handled by the generic
-error page and that **Try again** re-fetches the repaired data. Test data stays in
-  the temporary browser-test database. `agentRules: false` in `next.config.ts`
+error page and that retry re-fetches the repaired data. Test data stays in
+the temporary browser-test database. `agentRules: false` in `next.config.ts`
 prevents the dev preview from auto-generating unrelated root agent documents.
 
 For a new schema change, use `npm run db:migrate:dev -- --name descriptive_name`;
@@ -99,12 +105,12 @@ src/app/                 App Router pages, server action, loading/error states
 src/domain/schemas/      Zod schemas; all domain TypeScript types use z.infer
 src/domain/rules/        Validation that needs related domain records
 src/server/ai/           Vendor-free provider contract and deterministic fixture
-src/server/services/     Validated generation and session analysis workflow
+src/server/services/     Validated generation, session analysis, and execution
 src/server/db.ts         Prisma client factory; no import-time connection
 src/server/repositories/ Atomic plan writes and validated review reads
 src/server/storage/      Reserved for later attachment operations
 src/components/ui/       Shared demo notice
-src/features/            Task form and plan review UI
+src/features/            Task form, plan review, and execution actions
 prisma/                  SQLite schema and versioned migrations
 tests/                   Unit, integration, browser tests, and synthetic fixtures
 ```
@@ -120,7 +126,8 @@ tests/                   Unit, integration, browser tests, and synthetic fixture
   nullable `excludedAt`, so future pre-run removal can preserve identity and
   positions. Exclusion operations and plan editing are not implemented.
 - FAIL requires `actualResult`; BLOCKED requires `reason`; PASS accepts neither
-  failure-only field. Missing results mean unexecuted checks.
+  failure-only field. FAIL and BLOCKED allow an optional `comment`. Missing
+  results mean unexecuted checks.
 - `CheckResultsSchema` validates result uniqueness. SQLite also enforces the
   unique `(runId, checkId)` pair and ensures run and check belong to the same plan.
 - `BugReportForResultSchema` verifies a FAIL parent, matching result ID, and no
@@ -139,8 +146,8 @@ tests/                   Unit, integration, browser tests, and synthetic fixture
   connects it to the form through the validated generation service. No provider
   SDK, paid/external AI call, or seed data is included.
 
-Task creation, generation, persistence, and plan review are implemented.
-Execution, upload, bug, and report workflows are deferred.
+Task creation, generation, persistence, plan review, and manual execution are
+implemented. Upload, bug, and report workflows are deferred.
 Generated clients, databases, environment files, uploads, and test/build output
 are ignored by Git. The existing Word proposal is preserved locally and ignored
 because it predates the approved Stage 1 amendments.

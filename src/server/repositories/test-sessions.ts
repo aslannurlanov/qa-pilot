@@ -4,7 +4,10 @@ import type { PrismaClient } from "@/generated/prisma/client";
 
 function toDomainSession(record: Pick<TestSession, "id" | "title" | "description" | "generationStatus"> & { createdAt: Date; updatedAt: Date }) {
   return TestSessionSchema.parse({
-    ...record,
+    id: record.id,
+    title: record.title,
+    description: record.description,
+    generationStatus: record.generationStatus,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   });
@@ -13,8 +16,9 @@ function toDomainSession(record: Pick<TestSession, "id" | "title" | "description
 export async function listTestSessions(db: PrismaClient) {
   const records = await db.testSession.findMany({
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    include: { plan: { include: { run: true } } },
   });
-  return records.map(toDomainSession);
+  return records.map((record) => ({ ...toDomainSession(record), runStatus: record.plan?.run?.status ?? null }));
 }
 
 export async function findTestSession(db: PrismaClient, id: string) {
@@ -58,7 +62,7 @@ export async function findSessionReview(db: PrismaClient, id: string) {
   if (!IdSchema.safeParse(id).success) return null;
   const record = await db.testSession.findUnique({
     where: { id },
-    include: { plan: { include: { checks: { orderBy: { position: "asc" } } } } },
+    include: { plan: { include: { checks: { orderBy: { position: "asc" } }, run: true } } },
   });
   if (!record) return null;
 
@@ -91,5 +95,5 @@ export async function findSessionReview(db: PrismaClient, id: string) {
       excludedAt: check.excludedAt?.toISOString() ?? null,
     })),
   });
-  return { session, plan };
+  return { session, plan, hasRun: storedPlan?.run !== null && storedPlan?.run !== undefined };
 }
