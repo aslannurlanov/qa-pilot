@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { BugReportSchema, BugReportsSchema, CheckResultSchema } from "../schemas";
 
-// Use at a future bug-creation boundary; a report alone cannot prove its parent failed.
+// Use at the bug-creation boundary; a report alone cannot prove its parent failed.
 export const BugReportForResultSchema = z.strictObject({
   report: BugReportSchema,
   result: CheckResultSchema,

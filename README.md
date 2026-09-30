@@ -2,10 +2,9 @@
 
 Manual QA test planning assistant · MVP v0.1.
 
-Stage 3 adds manual execution to the existing browser workflow: Home → new test
-session → analyze with FakeAIProvider → review the saved plan → execute checks
-one at a time → review the final result. The original SQLite schema supports
-this flow without a new migration.
+Stage 4 adds explicit deterministic bug reports to the manual execution workflow:
+Home → new test session → analyze with FakeAIProvider → review the saved plan →
+execute checks → review results → create and copy a report for a failed check.
 
 ## Current browser workflow
 
@@ -30,11 +29,18 @@ this flow without a new migration.
   can include an optional comment. Results and progress are stored in SQLite;
   refresh and Home navigation resume the first unresolved check. When all
   checks are recorded, the page shows totals and each saved outcome.
+- On the completed summary, only FAIL cards offer **Создать баг-репорт**.
+  Creating a report snapshots the failed check's title, ordered steps, test data,
+  expected result, actual result, and QA comment. No AI is called. Preconditions
+  remain unspecified because the check model has no explicit preconditions.
+  Existing reports open at `/sessions/[sessionId]/run/bugs/[resultId]`; they are
+  never regenerated on reads. **Скопировать баг-репорт** copies plain text, with
+  a manual-copy fallback when the browser refuses clipboard access.
 - The fake always returns the same username-validation example, regardless of
   the task. Home, input, and review pages explicitly disclose this limitation.
 
 There is no real AI analysis, plan editing/exclusion, result editing, attachment,
-bug-report, authentication, or deployment workflow yet.
+bug-report editing, authentication, or deployment workflow yet.
 Use this as a local demo; session URLs are not access-controlled.
 
 Each form has a stable session ID. Repeat submissions reuse a completed plan;
@@ -86,8 +92,9 @@ Playwright owns its server on port 3100 and stops it after the tests. It does no
 reuse an unrelated server. It applies the migration before browser tests to a unique temporary SQLite
 database under `.runtime/` and removes it afterward; the development database
 is not used. Tests cover home, validation/correction, pending state, persistence
-after reload/reopen, missing sessions, manual execution and completion, and a
-narrow viewport. There are no CI or deployment configurations.
+after reload/reopen, missing sessions, manual execution and completion, bug
+creation/reopening, clipboard success/failure, and a narrow viewport. There are
+no CI or deployment configurations.
 
 The browser suite also verifies a corrupt stored plan is handled by the generic
 error page and that retry re-fetches the repaired data. Test data stays in
@@ -131,9 +138,13 @@ tests/                   Unit, integration, browser tests, and synthetic fixture
 - `CheckResultsSchema` validates result uniqueness. SQLite also enforces the
   unique `(runId, checkId)` pair and ensures run and check belong to the same plan.
 - `BugReportForResultSchema` verifies a FAIL parent, matching result ID, and no
-  existing report. SQLite enforces unique `BugReport.resultId` for concurrent
-  writes. A future write service must use this contextual validator inside its
-  transaction; a database FK alone does not prove the result is FAIL.
+  existing report. The creation service uses it inside a transaction, scopes
+  both the run and check to the requested session, and reuses existing reports.
+  SQLite enforces unique `BugReport.resultId` for concurrent writes.
+- Stage 4 adds only nullable `BugReport.comment` in migration
+  `20260930120000_bug_report_comment`. Existing rows and schema relationships
+  are preserved. Report content and comments are persisted snapshots; compact
+  task/check context is read from the source records. No report editing exists.
 - Only one plan per session and one run per plan are supported in v0.1.
 - Plans store schema/prompt versions, provider, and model. Arrays use JSON text
   columns; persistence code must parse these values through domain schemas.
@@ -146,8 +157,8 @@ tests/                   Unit, integration, browser tests, and synthetic fixture
   connects it to the form through the validated generation service. No provider
   SDK, paid/external AI call, or seed data is included.
 
-Task creation, generation, persistence, plan review, and manual execution are
-implemented. Upload, bug, and report workflows are deferred.
+Task creation, generation, persistence, plan review, manual execution, and
+deterministic bug reports are implemented. Upload workflows are deferred.
 Generated clients, databases, environment files, uploads, and test/build output
 are ignored by Git. The existing Word proposal is preserved locally and ignored
 because it predates the approved Stage 1 amendments.

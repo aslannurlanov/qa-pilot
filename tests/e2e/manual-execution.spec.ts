@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { DatabaseSync } from "node:sqlite";
-import { usernameTask } from "../../src/server/ai/fixtures/username-plan";
+import { usernamePlan, usernameTask } from "../../src/server/ai/fixtures/username-plan";
 
 test("manual execution survives refresh and resume, validates details, and completes once", async ({ page }) => {
   await page.goto("/");
@@ -75,6 +75,36 @@ test("manual execution survives refresh and resume, validates details, and compl
   await page.getByRole("link", { name: `Посмотреть результаты: ${usernameTask.title}` }).click();
   await expect(page.getByRole("heading", { name: "Тестирование завершено" })).toBeVisible();
 
+  const resultCards = page.getByRole("region", { name: "Записанные результаты" }).getByRole("listitem");
+  await expect(resultCards.filter({ hasText: "ПРОЙДЕНО" }).getByRole("button", { name: "Создать баг-репорт" })).toHaveCount(0);
+  await expect(resultCards.filter({ hasText: "ЗАБЛОКИРОВАНО" }).getByRole("button", { name: "Создать баг-репорт" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Создать баг-репорт" })).toHaveCount(1);
+  await page.getByRole("button", { name: "Создать баг-репорт" }).click();
+  await expect(page.getByRole("heading", { name: "Баг-репорт", exact: true })).toBeVisible();
+  const bugUrl = page.url();
+  await expect(page.getByRole("region", { name: "Заголовок", exact: true })).toContainText(`[Ошибка] ${usernamePlan.checks[1]!.title}`);
+  await expect(page.getByRole("region", { name: "Предусловия", exact: true })).toContainText("Не указаны.");
+  await expect(page.getByRole("region", { name: "Шаги воспроизведения", exact: true }).getByRole("listitem")).toHaveText(usernamePlan.checks[1]!.steps);
+  await expect(page.getByRole("region", { name: "Тестовые данные", exact: true }).getByRole("listitem")).toHaveText(usernamePlan.checks[1]!.testData);
+  await expect(page.getByRole("region", { name: "Ожидаемый результат", exact: true })).toContainText(usernamePlan.checks[1]!.expectedResult);
+  await expect(page.getByRole("region", { name: "Фактический результат", exact: true })).toContainText("Имя пользователя принято без проверки длины.");
+  await expect(page.getByRole("region", { name: "Дополнительная информация", exact: true })).toContainText("Повторено в Chrome.");
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.getByRole("button", { name: "Скопировать баг-репорт" }).click();
+  await expect(page.getByRole("main").getByRole("status")).toHaveText("Баг-репорт скопирован");
+  const copiedText = await page.evaluate(() => navigator.clipboard.readText());
+  // Windows clipboard converts LF to CRLF; the report content must be identical.
+  expect(copiedText.replaceAll("\r\n", "\n")).toContain("Дополнительная информация:\nПовторено в Chrome.");
+  await page.getByRole("link", { name: "Результаты тестирования" }).click();
+  await expect(page.getByRole("button", { name: "Создать баг-репорт" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Открыть баг-репорт" }).click();
+  await expect(page).toHaveURL(bugUrl);
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Дополнительная информация", exact: true })).toContainText("Повторено в Chrome.");
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async () => { throw new Error("Clipboard denied"); } } }));
+  await page.getByRole("button", { name: "Скопировать баг-репорт" }).click();
+  await expect(page.getByLabel("Текст баг-репорта")).toHaveValue(/Имя пользователя принято без проверки длины/);
+
   const path = process.env.QA_PILOT_E2E_DATABASE;
   if (!path) throw new Error("Missing isolated browser-test database.");
   const database = new DatabaseSync(path);
@@ -83,6 +113,7 @@ test("manual execution survives refresh and resume, validates details, and compl
     const run = database.prepare("SELECT id FROM TestRun WHERE planId = ?").get(plan.id) as { id: string };
     expect(database.prepare("SELECT count(*) AS count FROM TestRun WHERE planId = ?").get(plan.id)).toMatchObject({ count: 1 });
     expect(database.prepare("SELECT count(*) AS count FROM CheckResult WHERE runId = ?").get(run.id)).toMatchObject({ count: 4 });
+    expect(database.prepare("SELECT count(*) AS count FROM BugReport WHERE resultId IN (SELECT id FROM CheckResult WHERE runId = ?)").get(run.id)).toMatchObject({ count: 1 });
   } finally {
     database.close();
   }

@@ -139,6 +139,7 @@ model BugReport {
   testDataJson         String
   actualResult         String
   expectedResult       String
+  comment              String?
   environment          String?
   attachmentIdsJson    String
   createdAt            DateTime    @default(now())

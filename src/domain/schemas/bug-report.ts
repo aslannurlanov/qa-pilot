@@ -10,6 +10,7 @@ export const BugReportSchema = z.strictObject({
   testData: TextListSchema,
   actualResult: RequiredTextSchema,
   expectedResult: RequiredTextSchema,
+  comment: RequiredTextSchema.nullable().default(null),
   environment: RequiredTextSchema.nullable(),
   attachmentIds: z.array(IdSchema).max(3),
   createdAt: TimestampSchema,

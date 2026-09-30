@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ExecutionActions } from "@/features/test-sessions/execution-actions";
+import { CreateBugForm } from "@/features/bug-reports/create-bug-form";
 import { createDatabaseClient } from "@/server/db";
 import { getExecution } from "@/server/services/execute-test-plan";
 
@@ -16,7 +17,7 @@ export default async function RunPage({ params }: { params: Promise<{ sessionId:
   const execution = await getExecution(db, sessionId).finally(() => db.$disconnect());
   if (!execution) notFound();
   if (!execution.run) redirect(`/sessions/${sessionId}`);
-  const { session, checks, current, results, progress } = execution;
+  const { session, checks, current, results, progress, bugResultIds } = execution;
   return (
     <main className="page-shell max-w-4xl">
       <nav aria-label="Навигация по проверке" className="flex flex-wrap gap-x-6 gap-y-2 text-sm font-medium text-indigo-700">
@@ -70,6 +71,13 @@ export default async function RunPage({ params }: { params: Promise<{ sessionId:
                   {result?.outcome === "FAIL" && <p className="mt-3 whitespace-pre-wrap"><strong>Фактический результат:</strong> {result.actualResult}</p>}
                   {result?.outcome === "BLOCKED" && <p className="mt-3 whitespace-pre-wrap"><strong>Причина блокировки:</strong> {result.reason}</p>}
                   {result?.comment && <p className="mt-2 whitespace-pre-wrap"><strong>Комментарий:</strong> {result.comment}</p>}
+                  {result?.outcome === "FAIL" && (
+                    <div className="mt-4">
+                      {bugResultIds.includes(result.id) ? (
+                        <Link href={`/sessions/${sessionId}/run/bugs/${result.id}`} className="button-primary">Открыть баг-репорт</Link>
+                      ) : <CreateBugForm sessionId={sessionId} resultId={result.id} />}
+                    </div>
+                  )}
                 </li>;
               })}
             </ol>

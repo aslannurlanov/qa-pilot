@@ -23,6 +23,6 @@ export function makeBug(): BugReport {
     id: "bug-1", resultId: "result-1", title: "Valid username rejected on registration",
     preconditions: [], stepsToReproduce: ["Register with pilot123 and valid account details."],
     testData: ["Username: pilot123"], actualResult: "A valid username was rejected.",
-    expectedResult: "Registration succeeds.", environment: null, attachmentIds: [], createdAt: timestamp,
+    expectedResult: "Registration succeeds.", comment: null, environment: null, attachmentIds: [], createdAt: timestamp,
   };
 }

@@ -37,9 +37,9 @@ export async function getExecution(db: PrismaClient, sessionId: string) {
   if (!review?.plan) return null;
   const stored = await db.testRun.findUnique({
     where: { planId: review.plan.id },
-    include: { results: { orderBy: { recordedAt: "asc" } } },
+    include: { results: { orderBy: { recordedAt: "asc" }, include: { bug: { select: { id: true } } } } },
   });
-  if (!stored) return { ...review, run: null, results: [], checks: [], current: null, progress: { total: 0, done: 0, PASS: 0, FAIL: 0, BLOCKED: 0 } };
+  if (!stored) return { ...review, run: null, results: [], bugResultIds: [], checks: [], current: null, progress: { total: 0, done: 0, PASS: 0, FAIL: 0, BLOCKED: 0 } };
   const run = TestRunSchema.parse({ id: stored.id, planId: stored.planId, status: stored.status, startedAt: stored.startedAt.toISOString(), completedAt: stored.completedAt?.toISOString() ?? null });
   const results = stored.results.map((result) => CheckResultSchema.parse({
     id: result.id, runId: result.runId, planId: result.planId, checkId: result.checkId,
@@ -57,7 +57,7 @@ export async function getExecution(db: PrismaClient, sessionId: string) {
     FAIL: results.filter((result) => result.outcome === "FAIL").length,
     BLOCKED: results.filter((result) => result.outcome === "BLOCKED").length,
   };
-  return { ...review, run, results, checks, current, progress };
+  return { ...review, run, results, bugResultIds: stored.results.filter((result) => result.bug !== null).map((result) => result.id), checks, current, progress };
 }
 
 export async function recordCheckResult(db: PrismaClient, sessionId: string, raw: unknown) {
