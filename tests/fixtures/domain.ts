@@ -1,10 +1,11 @@
+import { TestPlanSchema } from "@/domain/schemas";
 import type { BugReport, CheckResult, TestPlan, TestRun } from "@/domain/schemas";
 import { usernamePlan } from "@/server/ai/fixtures/username-plan";
 
 export const timestamp = "2026-01-01T12:00:00.000Z";
 
 export function makePlan(): TestPlan {
-  return { ...structuredClone(usernamePlan), id: "plan-1", sessionId: "session-1", createdAt: timestamp };
+  return TestPlanSchema.parse({ ...structuredClone(usernamePlan), id: "plan-1", sessionId: "session-1", createdAt: timestamp });
 }
 
 export function makeResult(): CheckResult & { outcome: "FAIL" } {

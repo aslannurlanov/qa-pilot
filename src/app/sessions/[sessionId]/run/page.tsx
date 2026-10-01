@@ -41,8 +41,8 @@ export default async function RunPage({ params }: { params: Promise<{ sessionId:
               <span className="font-mono text-slate-600">ID проверки: {current.id}</span>
             </div>
             <h2 id="current-check-title" className="text-2xl font-semibold">{current.title}</h2>
-            <section aria-labelledby="steps-title"><h3 id="steps-title" className="font-semibold">Шаги</h3><ol className="mt-2 list-decimal space-y-2 pl-5">{current.steps.map((step, index) => <li key={index}>{step}</li>)}</ol></section>
-            <section aria-labelledby="data-title"><h3 id="data-title" className="font-semibold">Тестовые данные</h3>{current.testData.length ? <ul className="mt-2 list-disc space-y-2 pl-5">{current.testData.map((item, index) => <li key={index}>{item}</li>)}</ul> : <p className="mt-2 text-slate-600">Особые тестовые данные не указаны.</p>}</section>
+            <section aria-labelledby="steps-title"><h3 id="steps-title" className="font-semibold">Шаги</h3><ol className="mt-2 list-decimal space-y-2 pl-5">{current.steps.map((step, index) => <li key={index} className="whitespace-pre-wrap">{step}</li>)}</ol></section>
+            <section aria-labelledby="data-title"><h3 id="data-title" className="font-semibold">Тестовые данные</h3>{current.testData.length ? <ul className="mt-2 list-disc space-y-2 pl-5">{current.testData.map((item, index) => <li key={index} className="whitespace-pre-wrap">{item}</li>)}</ul> : <p className="mt-2 text-slate-600">Особые тестовые данные не указаны.</p>}</section>
             <section aria-labelledby="expected-title" className="rounded-xl bg-emerald-50 p-5"><h3 id="expected-title" className="font-semibold text-emerald-950">Ожидаемый результат</h3><p className="mt-2 whitespace-pre-wrap text-emerald-950">{current.expectedResult}</p></section>
             <section aria-labelledby="reason-title" className="rounded-xl bg-indigo-50 p-5"><h3 id="reason-title" className="font-semibold text-indigo-950">Почему нужна эта проверка?</h3><p className="mt-2 whitespace-pre-wrap text-indigo-950">{current.reason}</p></section>
           </article>

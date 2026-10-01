@@ -1,0 +1,103 @@
+import { DatabaseSync } from "node:sqlite";
+import { expect, test } from "@playwright/test";
+import { usernamePlan, usernameTask } from "../../src/server/ai/fixtures/username-plan";
+
+test("QA review persists content/provenance, freezes stale tabs, and executes only reviewed scope", async ({ page, context }) => {
+  await page.goto("/sessions/new");
+  await page.getByLabel("Название задачи", { exact: true }).fill("Stage 7 review acceptance");
+  await page.getByLabel("Описание задачи", { exact: true }).fill(usernameTask.description);
+  await page.getByRole("button", { name: "Проанализировать задачу" }).click();
+  await expect(page).toHaveURL(/\/sessions\/[a-f0-9-]+$/);
+  const planUrl = page.url();
+  // "add" is a valid generated ID and must not collide with the add-editor state.
+  const databasePath = process.env.QA_PILOT_E2E_DATABASE;
+  if (!databasePath) throw Error("Missing isolated browser-test database");
+  const sqlite = new DatabaseSync(databasePath);
+  try {
+    const sessionId = new URL(planUrl).pathname.split("/").at(-1)!;
+    sqlite.prepare('UPDATE TestCheck SET id=? WHERE id=? AND planId=(SELECT id FROM TestPlan WHERE sessionId=?)').run("add", usernamePlan.checks[1]!.id, sessionId);
+  } finally { sqlite.close(); }
+  await page.reload();
+  const negative = page.getByRole("article", { name: usernamePlan.checks[1]!.title, exact: true });
+  await negative.getByRole("button", { name: "Редактировать", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Начать тестирование", exact: true })).toBeDisabled();
+  const edit = page.getByRole("form", { name: "Редактирование проверки" });
+  await edit.getByLabel("Название проверки", { exact: true }).fill("Отклонение недопустимого имени — правка QA");
+  await edit.getByLabel("Шаги: 1", { exact: true }).fill("Проверенный шаг QA\nВторая строка шага");
+  await edit.getByLabel("Ожидаемый результат", { exact: true }).fill("Исправленное ожидание QA");
+  await edit.getByRole("button", { name: "Сохранить изменения" }).click();
+  const reviewed = page.getByRole("article", { name: "Отклонение недопустимого имени — правка QA", exact: true });
+  await expect(reviewed).toContainText("Изменено QA · Основа: демонстрационный пример");
+  await expect(reviewed).toContainText("Проверенный шаг QA");
+
+  await page.getByRole("button", { name: "Добавить проверку", exact: true }).click();
+  const add = page.getByRole("form", { name: "Новая ручная проверка" });
+  await add.getByRole("button", { name: "Добавить проверку", exact: true }).click();
+  await expect(add.getByRole("alert")).toHaveText("Проверьте выделенные поля.");
+  await add.getByLabel("Название проверки", { exact: true }).fill("Ручная проверка QA");
+  await add.getByLabel("Тип проверки", { exact: true }).selectOption("regression");
+  await add.getByLabel("Шаги: 1", { exact: true }).fill("Ручной шаг\nСохранённая вторая строка");
+  await add.getByRole("button", { name: "Добавить строку (тестовые данные)", exact: true }).click();
+  await add.getByLabel("Тестовые данные: 1", { exact: true }).fill("Ручные данные");
+  await add.getByLabel("Ожидаемый результат", { exact: true }).fill("Ручное ожидание");
+  await add.getByLabel("Почему нужна проверка", { exact: true }).fill("Дополнение по требованию QA");
+  await add.getByRole("button", { name: "Добавить проверку", exact: true }).click();
+  const manual = page.getByRole("article", { name: "Ручная проверка QA", exact: true });
+  await expect(manual).toContainText("Добавлено QA");
+  await manual.getByRole("button", { name: "Редактировать", exact: true }).click();
+  await page.getByRole("form", { name: "Редактирование проверки" }).getByLabel("Ожидаемый результат", { exact: true }).fill("Ручное ожидание после правки");
+  await page.getByRole("button", { name: "Сохранить изменения" }).click();
+  await expect(manual).toContainText("Ручное ожидание после правки");
+
+  const boundary = page.getByRole("article", { name: usernamePlan.checks[2]!.title, exact: true });
+  await boundary.getByRole("button", { name: "Исключить", exact: true }).click();
+  await expect(boundary).toContainText("Исключена из выполнения");
+  await boundary.getByRole("button", { name: "Вернуть в план", exact: true }).click();
+  await expect(boundary).toContainText("Включена в план");
+  await boundary.getByRole("button", { name: "Исключить", exact: true }).click();
+  await expect(page.getByText("Всего: 5 · В плане: 4 · Исключено: 1", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(reviewed).toContainText("Исправленное ожидание QA");
+  await expect(manual).toContainText("Ручное ожидание после правки");
+  await expect(boundary).toContainText("Исключена из выполнения");
+
+  const stale = await context.newPage();
+  await stale.goto(planUrl);
+  await stale.getByRole("article", { name: "Ручная проверка QA", exact: true }).getByRole("button", { name: "Редактировать", exact: true }).click();
+  await stale.getByLabel("Название проверки", { exact: true }).fill("Недопустимая поздняя правка");
+  await page.getByRole("button", { name: "Начать тестирование", exact: true }).click();
+  await expect(page).toHaveURL(`${planUrl}/run`);
+  await stale.getByRole("button", { name: "Сохранить изменения" }).click();
+  await expect(stale.getByRole("form", { name: "Редактирование проверки" }).getByRole("alert")).toHaveText("Тестирование уже начато. План зафиксирован; изменения недоступны.");
+  await stale.reload();
+  await expect(stale.getByRole("button", { name: "Редактировать", exact: true })).toHaveCount(0);
+  await expect(stale.getByRole("article", { name: "Ручная проверка QA", exact: true })).toBeVisible();
+  await stale.close();
+
+  await page.getByRole("button", { name: "ПРОЙДЕНО", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Отклонение недопустимого имени — правка QA", exact: true })).toBeVisible();
+  await expect(page.getByText("Исправленное ожидание QA", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "ОШИБКА", exact: true }).click();
+  await page.getByLabel("Фактический результат", { exact: true }).fill("Наблюдаемая ошибка после review");
+  await page.getByRole("button", { name: "Зафиксировать ошибку и перейти дальше" }).click();
+  await expect(page.getByRole("heading", { name: "Проверка 3 из 4", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "ПРОЙДЕНО", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Ручная проверка QA", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "ПРОЙДЕНО", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Тестирование завершено", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Создать баг-репорт", exact: true }).click();
+  await expect(page.getByRole("main")).toContainText("[Ошибка] Отклонение недопустимого имени — правка QA");
+  await expect(page.getByRole("main")).toContainText("Исправленное ожидание QA");
+  await expect(page.getByRole("main")).toContainText("Проверенный шаг QA");
+  await page.goto(`${planUrl}/run/report`);
+  await expect(page.getByRole("region", { name: "Итоги", exact: true }).getByRole("definition")).toHaveText(["4", "3", "1", "0"]);
+  const entries = page.getByRole("region", { name: "Результаты проверок", exact: true });
+  await expect(entries).toContainText("Изменено QA"); await expect(entries).toContainText("Добавлено QA");
+  await expect(entries).not.toContainText(usernamePlan.checks[2]!.title);
+  await expect(entries).toContainText("Ручное ожидание после правки");
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.getByRole("button", { name: "Скопировать отчёт", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("status")).toHaveText("Отчёт скопирован");
+  const text = await page.evaluate(() => navigator.clipboard.readText());
+  expect(text).toContain("Происхождение проверки: Добавлено QA"); expect(text).toContain("Изменено QA");
+});

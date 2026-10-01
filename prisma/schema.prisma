@@ -26,6 +26,11 @@ enum CheckBasis {
   assumption
 }
 
+enum CheckOrigin {
+  GENERATED
+  MANUAL
+}
+
 enum RunStatus {
   IN_PROGRESS
   COMPLETED
@@ -76,8 +81,10 @@ model TestCheck {
   reason         String
   basis          CheckBasis
   sourceRefsJson String?
-  // Future pre-run exclusion preserves the check's identity and position.
+  // Pre-run exclusion preserves the check's identity and position.
   excludedAt     DateTime?
+  origin         CheckOrigin @default(GENERATED)
+  editedAt       DateTime?
   plan           TestPlan      @relation(fields: [planId], references: [id], onDelete: Restrict)
   results        CheckResult[]
 

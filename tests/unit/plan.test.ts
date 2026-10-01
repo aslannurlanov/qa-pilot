@@ -14,7 +14,7 @@ describe("test plan validation", () => {
     const template = TestCheckSchema.parse(plan.checks[0]);
     plan.checks = Array.from({ length: count }, (_, position) => ({ ...template, id: `check-${position}`, position }));
     expect(TestPlanSchema.safeParse(plan).success).toBe(count <= 20);
-    expect(GeneratedTestPlanSchema.safeParse({ ...usernamePlan, checks: plan.checks }).success).toBe(count <= 20);
+    expect(GeneratedTestPlanSchema.safeParse({ ...usernamePlan, checks: Array.from({ length: count }, (_, position) => ({ ...usernamePlan.checks[0]!, id: `check-${position}`, position })) }).success).toBe(count <= 20);
   });
 
   it("rejects duplicate check IDs even with different positions", () => {
@@ -54,7 +54,7 @@ describe("test plan validation", () => {
     const plan = makePlan();
     plan.checks = plan.checks.map((check, index) => ({ ...check, position: index * 2, excludedAt: index === 0 ? timestamp : null }));
     expect(TestPlanSchema.parse(plan).checks[0]?.id).toBe("username-positive");
-    expect(GeneratedTestPlanSchema.safeParse({ ...usernamePlan, checks: plan.checks }).success).toBe(false);
+    expect(GeneratedTestPlanSchema.safeParse({ ...usernamePlan, checks: [{ ...usernamePlan.checks[0]!, excludedAt: timestamp }] }).success).toBe(false);
   });
 
   it("requires questions when no checks can be generated", () => {

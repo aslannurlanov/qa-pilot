@@ -8,24 +8,32 @@ import {
   TitleSchema,
 } from "./common";
 
-export const MAX_GENERATED_CHECKS = 20;
+export const MAX_PLAN_CHECKS = 20;
 export const PLAN_SCHEMA_VERSION = "1";
 
 export const CheckTypeSchema = z.enum(["positive", "negative", "boundary", "regression"]);
 
-export const TestCheckSchema = z.strictObject({
-  id: IdSchema,
-  position: z.number().int().nonnegative(),
-  type: CheckTypeSchema,
+export const CheckContentSchema = z.strictObject({
   title: TitleSchema,
+  type: CheckTypeSchema,
   steps: TextListSchema.min(1),
   testData: TextListSchema,
   expectedResult: RequiredTextSchema,
   reason: RequiredTextSchema,
   basis: z.enum(["requirement", "assumption"]),
+});
+
+const GeneratedCheckSchema = CheckContentSchema.extend({
+  id: IdSchema,
+  position: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   sourceRefs: z.array(SourceRefSchema).max(20).optional(),
-  // Reserved for removing a check before a run. No editing operation exists yet.
+  // Persisted review may exclude checks before the plan is frozen.
   excludedAt: TimestampSchema.nullable().default(null),
+});
+
+export const TestCheckSchema = GeneratedCheckSchema.extend({
+  origin: z.enum(["GENERATED", "MANUAL"]).default("GENERATED"),
+  editedAt: TimestampSchema.nullable().default(null),
 });
 
 export const PlanMetadataSchema = z.strictObject({
@@ -39,7 +47,7 @@ const PlanContentSchema = z.strictObject({
   summary: RequiredTextSchema,
   risks: TextListSchema,
   questions: TextListSchema,
-  checks: z.array(TestCheckSchema).max(MAX_GENERATED_CHECKS),
+  checks: z.array(GeneratedCheckSchema).max(MAX_PLAN_CHECKS),
   metadata: PlanMetadataSchema,
 });
 
@@ -76,6 +84,7 @@ export const GeneratedTestPlanSchema = PlanContentSchema.superRefine(validatePla
   });
 
 export const TestPlanSchema = PlanContentSchema.extend({
+  checks: z.array(TestCheckSchema).max(MAX_PLAN_CHECKS),
   id: IdSchema,
   sessionId: IdSchema,
   createdAt: TimestampSchema,

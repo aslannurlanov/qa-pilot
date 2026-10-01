@@ -1,3 +1,4 @@
+import { checkProvenance } from "./check-provenance";
 import type { TestingReport } from "./testing-report";
 
 export const reportTypeLabels = { positive: "Позитивный", negative: "Негативный", boundary: "Граничный", regression: "Регрессионный" } as const;
@@ -9,6 +10,7 @@ export function formatTestingReport(report: TestingReport): string {
   const details = entries.map(({ check, result, bugUrl }) => [
     `${check.id} · ${check.title}`,
     `Тип: ${reportTypeLabels[check.type]}; результат: ${reportOutcomeLabels[result.outcome]}`,
+    `Происхождение проверки: ${checkProvenance(check, plan.metadata.provider)}`,
     `Ожидаемый результат:\n${check.expectedResult}`,
     `Почему нужна проверка:\n${check.reason}`,
     `Основание: ${reportBasisLabels[check.basis]}`,
@@ -27,14 +29,14 @@ export function formatTestingReport(report: TestingReport): string {
   return [
     "Отчёт о тестировании",
     `Задача:\n${session.title}\n${session.description}\nID сессии: ${session.id}\nID запуска: ${run.id}`,
-    `Область проверки:\n${plan.summary}\n${entries.map(({ check }) => `${check.id} · ${check.title}`).join("\n")}`,
+    `Область проверки:\nТолько проверки, выбранные для выполнения. Исключённые проверки вне выполненного объёма.\n${plan.summary}\n${entries.map(({ check }) => `${check.id} · ${check.title}`).join("\n")}`,
     `Период:\nНачало: ${run.startedAt}\nЗавершение: ${run.completedAt}`,
     `Итоги:\nВсего проверок: ${totals.total}\nПройдено: ${totals.pass}\nОшибок: ${totals.fail}\nЗаблокировано: ${totals.blocked}\nЗаписано результатов: ${totals.recorded}\nБез результата: ${totals.unresolved}\n${report.conclusion}`,
     `Результаты проверок:\n${details.join("\n\n")}`,
     `Ошибки:\n${failures.length ? failures.join("\n\n") : "Ошибки не зафиксированы."}`,
     `Блокировки:\n${blocked.length ? blocked.join("\n\n") : "Блокировки не зафиксированы."}`,
     `Риски и вопросы из плана (контекст планирования, не подтверждённые находки или решённые вопросы):\nРиски:\n${plan.risks.length ? plan.risks.join("\n") : "Риски не указаны."}\nВопросы:\n${plan.questions.length ? plan.questions.join("\n") : "Вопросы не указаны."}`,
-    `Происхождение плана:\nПровайдер: ${plan.metadata.provider}\nМодель: ${plan.metadata.model}\nВерсия схемы: ${plan.metadata.schemaVersion}\nВерсия шаблона: ${plan.metadata.promptVersion}${plan.metadata.provider === "fake" ? "\nДемонстрационный план: один пример проверки имени пользователя для любой задачи." : ""}`,
+    `Происхождение плана:\nМетаданные исходного сгенерированного плана; правки и ручные проверки QA отмечены отдельно.\nПровайдер: ${plan.metadata.provider}\nМодель: ${plan.metadata.model}\nВерсия схемы: ${plan.metadata.schemaVersion}\nВерсия шаблона: ${plan.metadata.promptVersion}${plan.metadata.provider === "fake" ? "\nДемонстрационный исходный план: один пример проверки имени пользователя для любой задачи." : ""}`,
     "Отчёт отражает текущие сохранённые данные запуска. Он не является оценкой готовности релиза или полноты покрытия требований. Заблокированные проверки не подтверждают работоспособность.",
   ].join("\n\n");
 }

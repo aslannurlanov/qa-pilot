@@ -49,7 +49,7 @@ export async function saveGeneratedPlan(db: PrismaClient, sessionId: string, pla
             reason: check.reason,
             basis: check.basis,
             sourceRefsJson: check.sourceRefs === undefined ? null : JSON.stringify(check.sourceRefs),
-            excludedAt: null,
+            excludedAt: null, origin: "GENERATED", editedAt: null,
           })),
         },
       },
@@ -93,6 +93,7 @@ export async function findSessionReview(db: Pick<PrismaClient, "testSession">, i
       basis: check.basis,
       ...(check.sourceRefsJson === null ? {} : { sourceRefs: JSON.parse(check.sourceRefsJson) }),
       excludedAt: check.excludedAt?.toISOString() ?? null,
+      origin: check.origin, editedAt: check.editedAt?.toISOString() ?? null,
     })),
   });
   return { session, plan, hasRun: storedPlan?.run !== null && storedPlan?.run !== undefined };

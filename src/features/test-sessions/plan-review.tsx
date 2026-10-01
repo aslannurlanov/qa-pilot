@@ -1,6 +1,14 @@
+"use client";
+
 import type { CheckType, TestCheck, TestPlan } from "@/domain/schemas";
 import Link from "next/link";
-import { startTesting } from "@/app/sessions/[sessionId]/run/actions";
+import { useState } from "react";
+import { MAX_PLAN_CHECKS } from "@/domain/schemas/plan";
+import { reviewMessages } from "@/domain/schemas/plan-review";
+import { checkProvenance } from "@/domain/rules/check-provenance";
+import { CheckReviewForm } from "./check-review-form";
+import { CheckReviewControls } from "./check-review-controls";
+import { StartTestingForm } from "./start-testing-form";
 
 const checkTypeLabels: Record<CheckType, string> = {
   positive: "Позитивный",
@@ -16,13 +24,22 @@ const basisLabels: Record<TestCheck["basis"], string> = {
 
 function TextList({ items, empty }: { items: string[]; empty: string }) {
   return items.length === 0 ? <p className="text-slate-500">{empty}</p> : (
-    <ul className="list-disc space-y-2 pl-5">{items.map((item, index) => <li key={index}>{item}</li>)}</ul>
+    <ul className="list-disc space-y-2 pl-5">{items.map((item, index) => <li key={index} className="whitespace-pre-wrap">{item}</li>)}</ul>
   );
 }
 
 export function PlanReview({ plan, hasRun }: { plan: TestPlan; hasRun: boolean }) {
+  const [editor, setEditor] = useState<{ kind: "add" } | { kind: "edit"; checkId: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const included = plan.checks.filter((check) => check.excludedAt === null).length;
+  const editable = !hasRun;
+  const closeEditor = (success?: boolean) => { setEditor(null); setSaved(Boolean(success)); };
   return (
     <div className="space-y-6">
+      <p className="font-semibold">Всего: {plan.checks.length} · В плане: {included} · Исключено: {plan.checks.length - included}</p>
+      {saved && <p role="status" className="text-sm text-emerald-800">Изменения сохранены.</p>}
+      {hasRun && <p className="panel">{reviewMessages.frozen}</p>}
       <section className="panel" aria-labelledby="summary-title">
         <h2 id="summary-title" className="section-title">Что изменилось</h2>
         <p className="mt-3 whitespace-pre-wrap text-slate-600">{plan.summary}</p>
@@ -40,7 +57,7 @@ export function PlanReview({ plan, hasRun }: { plan: TestPlan; hasRun: boolean }
       <section aria-labelledby="checks-title" className="space-y-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 id="checks-title" className="section-title">План тестирования</h2>
-          <p className="text-sm text-slate-500">Проверок: {plan.checks.length} из 20</p>
+          <p className="text-sm text-slate-500">Проверок: {plan.checks.length} из {MAX_PLAN_CHECKS}</p>
         </div>
         {plan.checks.length === 0 && <p className="panel">Проверки не сформированы. Сначала уточните вопросы по задаче.</p>}
         {plan.checks.map((check, index) => (
@@ -50,6 +67,7 @@ export function PlanReview({ plan, hasRun }: { plan: TestPlan; hasRun: boolean }
               <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-800">{checkTypeLabels[check.type]}</span>
               <span className="font-mono text-xs text-slate-500">ID проверки: {check.id}</span>
             </div>
+            <p className="mb-3 text-sm font-medium">{check.excludedAt ? "Исключена из выполнения" : "Включена в план"} · {checkProvenance(check, plan.metadata.provider)}</p>
             <h3 id={`check-${check.id}`} className="text-xl font-semibold">{check.title}</h3>
             <div className="my-5 rounded-lg border-l-4 border-indigo-400 bg-indigo-50 p-4">
               <h4 className="font-semibold text-indigo-950">Почему нужна эта проверка?</h4>
@@ -57,7 +75,7 @@ export function PlanReview({ plan, hasRun }: { plan: TestPlan; hasRun: boolean }
               <p className="mt-2 text-xs text-indigo-700">Основание: {basisLabels[check.basis]}</p>
             </div>
             <h4 className="mb-2 font-semibold">Шаги</h4>
-            <ol className="list-decimal space-y-2 pl-5">{check.steps.map((step, stepIndex) => <li key={stepIndex}>{step}</li>)}</ol>
+            <ol className="list-decimal space-y-2 pl-5">{check.steps.map((step, stepIndex) => <li key={stepIndex} className="whitespace-pre-wrap">{step}</li>)}</ol>
             <h4 className="mb-2 mt-5 font-semibold">Тестовые данные</h4>
             <TextList items={check.testData} empty="Особые тестовые данные не указаны." />
             <h4 className="mb-2 mt-5 font-semibold">Ожидаемый результат</h4>
@@ -70,20 +88,24 @@ export function PlanReview({ plan, hasRun }: { plan: TestPlan; hasRun: boolean }
                 ))}</ul>
               </div>
             )}
+            {editable && <CheckReviewControls sessionId={plan.sessionId} checkId={check.id} onBusy={setBusy} excluded={check.excludedAt !== null} disabled={editor !== null || busy} onEdit={() => { setEditor({ kind: "edit", checkId: check.id }); setSaved(false); }} />}
+            {editable && editor?.kind === "edit" && editor.checkId === check.id && <CheckReviewForm key={check.id} sessionId={plan.sessionId} check={check} onClose={closeEditor} />}
           </article>
         ))}
       </section>
+      {editable && <div className="panel">
+        {editor?.kind === "add" ? <CheckReviewForm sessionId={plan.sessionId} onClose={closeEditor} /> : <button type="button" disabled={editor !== null || busy || plan.checks.length >= MAX_PLAN_CHECKS} onClick={() => { setEditor({ kind: "add" }); setSaved(false); }} className="button-primary">Добавить проверку</button>}
+        {plan.checks.length >= MAX_PLAN_CHECKS && <p className="mt-3 text-sm text-slate-500">{reviewMessages.limit}</p>}
+      </div>}
       <div className="panel">
+        {!hasRun && <p className="mb-4 text-sm text-slate-600">Тестирование начнётся по сохранённым проверкам. После начала изменять план нельзя.</p>}
         {hasRun ? (
           <Link href={`/sessions/${plan.sessionId}/run`} className="button-primary">Открыть тестирование</Link>
         ) : plan.checks.some((check) => check.excludedAt === null) ? (
-          <form action={startTesting}>
-            <input type="hidden" name="sessionId" value={plan.sessionId} />
-            <button type="submit" className="button-primary">Начать тестирование</button>
-          </form>
-        ) : <p className="text-sm text-slate-600">В плане нет проверок для выполнения.</p>}
+          <StartTestingForm sessionId={plan.sessionId} disabled={editor !== null || busy} />
+        ) : <p className="text-sm text-slate-600">{reviewMessages["empty-scope"]}</p>}
       </div>
-      <p className="text-xs text-slate-500">Провайдер: {plan.metadata.provider} · Модель: {plan.metadata.model} · Версия схемы: {plan.metadata.schemaVersion} · Версия шаблона: {plan.metadata.promptVersion}</p>
+      <p className="text-xs text-slate-500">Исходный сгенерированный план · Провайдер: {plan.metadata.provider} · Модель: {plan.metadata.model} · Версия схемы: {plan.metadata.schemaVersion} · Версия шаблона: {plan.metadata.promptVersion}</p>
     </div>
   );
 }

@@ -2,8 +2,8 @@
 
 Manual QA test planning assistant · MVP v0.1.
 
-Stage 6 completes the core workflow with a deterministic read-only final testing report:
-Home → new test session → analyze with the selected AIProvider → review the saved plan →
+Stage 7 adds QA-controlled plan review before freezing the scope for manual execution:
+Home → new test session → analyze with the selected AIProvider → review/edit/add/exclude checks → freeze the saved scope →
 execute checks → review results → explicitly create BugReports for failures → review and copy the final testing report.
 
 ## Current browser workflow
@@ -17,7 +17,7 @@ execute checks → review results → explicitly create BugReports for failures 
 - The server saves the task, validates the selected provider's output, and atomically
   persists the plan, checks, metadata, and successful generation status.
 - Review the saved task, summary, risks, questions, and checks at
-  `/sessions/[sessionId]`. Each check shows its ID, type, steps, test data,
+  `/sessions/[sessionId]`. Each check shows its ID, type, steps, test data, provenance,
   expected result, visible reason, and basis. Refreshing or reopening the URL
   reads SQLite. Return home to reopen it from the saved sessions list.
 - If generation or validation fails, the saved session offers a retry using the
@@ -38,8 +38,41 @@ execute checks → review results → explicitly create BugReports for failures 
   a manual-copy fallback when the browser refuses clipboard access.
 - The fake always returns the same username-validation example, regardless of
   the task. Home and input pages disclose the active generation mode. Saved plan
-  review uses persisted provider metadata, so configuration changes never relabel
+  review uses persisted provider metadata for the initial generated plan, so configuration changes never relabel
   an old fake plan as a real AI plan.
+
+## QA-controlled plan review
+
+Before **Начать тестирование**, QA can edit check title, type, ordered steps,
+test data, expected result, reason, and requirement/assumption basis. Expand
+**Редактировать**, save or cancel, or **Добавить проверку** to append a manual
+check. List rows preserve multiline content. IDs, positions, source references,
+task/summary/risks/questions, and original generation metadata are not editable.
+
+**Исключить** removes a check only from execution; **Вернуть в план** restores it.
+There is no hard deletion. Counts show total/included/excluded checks. The single
+20-total-check cap includes generated, manual, and excluded checks: excluding a
+check does not create capacity. Manual checks receive server-generated UUIDs and
+append after the highest saved position, without renumbering existing checks.
+
+Provenance distinguishes untouched generation, **Изменено QA**, and **Добавлено QA**.
+Fake-generated checks remain labelled as an initial demonstration example, even
+after QA edits; manual checks are never labelled as AI-generated. Plan metadata
+continues to describe the initial generated plan. No-op saves and exclusion do
+not mark content as edited; an actual edit retains its edit history even if its
+original wording is later restored.
+
+Review saves persist immediately and never call AI. Open editors/pending saves
+prevent starting in that tab. First run creation and all review mutations share
+a SQLite writer guard inside their transactions. Once any run exists the plan
+is permanently frozen, including submissions from stale tabs. Starting requires
+at least one included check. Concurrent lock contention fails safely with a
+retryable message; there are no automatic retries or background jobs.
+
+This local/personal v0.1 represents one testing pass per plan. Multiple runs,
+retesting after fixes, changing recorded outcomes, regeneration, question resolution,
+and plan version history remain deferred. A later fix does not overwrite the
+original failure evidence.
 
 ## Final testing report
 
@@ -55,7 +88,7 @@ This report is derived from current persisted records, not a saved snapshot. Rea
 refreshing, reopening, or copying it performs no application writes, AI calls, or
 external requests. A BugReport explicitly created later appears on refresh. Reads
 use the existing scoped queries in a read transaction, without per-BugReport queries.
-No new Prisma schema, migration, report table, or dependency is required.
+Stage 6 introduced no report table; Stage 7 adds only check provenance columns.
 
 Only a valid completed run with exactly one result per executable check is eligible.
 Excluded checks are outside the executable scope. Missing/unfinished runs do not show
@@ -65,7 +98,7 @@ plan; there is no pass-rate percentage or claim of release readiness/full covera
 Saved risks/questions are planning context, not confirmed defects or resolved questions.
 Tester identity, tested build, environment, severity, and missing answers are not invented.
 
-There is no plan editing/exclusion, result editing, attachment,
+There is no result editing, attachment,
 bug-report editing, authentication, or deployment workflow yet.
 Use this as a local demo; session URLs are not access-controlled.
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildTestingReport } from "@/domain/rules/testing-report";
 import { formatTestingReport } from "@/domain/rules/format-testing-report";
 import type { TestingReportSource } from "@/domain/schemas/testing-report";
+import { TestPlanSchema } from "@/domain/schemas";
 import type { CheckOutcome } from "@/domain/schemas";
 import { usernamePlan, usernameTask } from "@/server/ai/fixtures/username-plan";
 
@@ -9,7 +10,7 @@ const timestamp = "2026-09-30T10:00:00.000Z";
 function source(outcomes: CheckOutcome[] = ["PASS", "FAIL", "BLOCKED", "PASS"]): TestingReportSource {
   return {
     session: { ...usernameTask, id: "session-1", generationStatus: "SUCCEEDED", createdAt: timestamp, updatedAt: timestamp },
-    plan: { ...structuredClone(usernamePlan), id: "plan-1", sessionId: "session-1", createdAt: timestamp },
+    plan: TestPlanSchema.parse({ ...structuredClone(usernamePlan), id: "plan-1", sessionId: "session-1", createdAt: timestamp }),
     run: { id: "run-1", planId: "plan-1", status: "COMPLETED", startedAt: timestamp, completedAt: timestamp },
     results: outcomes.map((outcome, index) => ({
       id: `result-${index}`, runId: "run-1", planId: "plan-1", checkId: usernamePlan.checks[index]!.id, recordedAt: timestamp,
@@ -92,7 +93,7 @@ describe("plain-text testing report", () => {
     expect(text).toContain("Комментарий QA");
     expect(text).toContain("Баг-репорт не создан");
     for (const section of ["Задача:", "Область проверки:", "Период:", "Итоги:", "Результаты проверок:", "Ошибки:", "Блокировки:", "Риски и вопросы из плана", "Происхождение плана:"]) expect(text).toContain(section);
-    expect(text).toContain("Демонстрационный план");
+    expect(text).toContain("Демонстрационный исходный план");
     expect(text).not.toContain("%");
     expect(text.indexOf("username-positive")).toBeLessThan(text.indexOf("username-negative"));
   });
@@ -103,6 +104,6 @@ describe("plain-text testing report", () => {
     const text = formatTestingReport(buildTestingReport(data, "session-1"));
     for (const empty of ["Риски не указаны.", "Вопросы не указаны.", "Ошибки не зафиксированы.", "Блокировки не зафиксированы."]) expect(text).toContain(empty);
     expect(text).toContain("Провайдер: openai");
-    expect(text).not.toContain("Демонстрационный план");
+    expect(text).not.toContain("Демонстрационный исходный план");
   });
 });

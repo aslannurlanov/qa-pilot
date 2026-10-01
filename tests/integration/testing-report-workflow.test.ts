@@ -73,7 +73,7 @@ describe("read-only final reports", () => {
     expect(await getTestingReport(db, sessionId)).toEqual({ status: "unfinished" });
     const clarificationId = randomUUID();
     await analyzeTestSession(db, { generateTestPlan: async () => ({ ...usernamePlan, checks: [] }) }, clarificationId, usernameTask);
-    expect(await startOrResumeRun(db, clarificationId)).toBeNull();
+    await expect(startOrResumeRun(db, clarificationId)).rejects.toMatchObject({ code: "empty-scope" });
     expect(await getTestingReport(db, clarificationId)).toEqual({ status: "not-started" });
   });
   it("does not leak another session's outcomes or bugs", async () => {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CheckTypeSchema, MAX_GENERATED_CHECKS } from "@/domain/schemas/plan";
+import { CheckTypeSchema, MAX_PLAN_CHECKS } from "@/domain/schemas/plan";
 import { IdSchema, RequiredTextSchema, TextListSchema, TitleSchema } from "@/domain/schemas/common";
 
 // All wire fields are required. Application metadata and exclusion are not model output.
@@ -22,5 +22,5 @@ export const OpenAIPlanSchema = z.strictObject({
       reference: RequiredTextSchema.max(500),
       label: TitleSchema.nullable(),
     })).max(20),
-  })).max(MAX_GENERATED_CHECKS),
+  })).max(MAX_PLAN_CHECKS),
 });

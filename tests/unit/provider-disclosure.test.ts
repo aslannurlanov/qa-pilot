@@ -9,7 +9,9 @@ describe("provider disclosure", () => {
   });
   it("discloses AI review without claiming fixture generation", () => {
     const html = renderToStaticMarkup(createElement(DemoNotice, { provider: "openai" }));
-    expect(html).toContain("на основе названия и описания задачи");
+    expect(html).toContain("OpenAI");
+    expect(html).toContain("передаются внешнему сервису");
+    expect(html).toContain("расходует средства API");
     expect(html).not.toContain("имени пользователя");
   });
 });

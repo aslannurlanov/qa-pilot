@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { IdSchema, TestRunSchema, CheckResultSchema } from "@/domain/schemas";
 import type { PrismaClient } from "@/generated/prisma/client";
+import { acquirePlanWriteGuard, isPlanWriteBusy, PlanStartError } from "./plan-write-guard";
 import { findSessionReview } from "@/server/repositories/test-sessions";
 
 export const ResultInputSchema = z.discriminatedUnion("outcome", [
@@ -13,17 +14,20 @@ export type ResultInput = z.infer<typeof ResultInputSchema>;
 
 export async function startOrResumeRun(db: PrismaClient, sessionId: string) {
   const id = IdSchema.parse(sessionId);
-  const session = await db.testSession.findUnique({ where: { id }, include: { plan: { include: { checks: true } } } });
-  if (!session?.plan || session.generationStatus !== "SUCCEEDED" || !session.plan.checks.some((check) => check.excludedAt === null)) return null;
-  // The unique planId constraint is the final guard for concurrent starts.
   try {
-    const run = await db.testRun.upsert({ where: { planId: session.plan.id }, create: { planId: session.plan.id }, update: {} });
-    return TestRunSchema.parse({ ...run, startedAt: run.startedAt.toISOString(), completedAt: run.completedAt?.toISOString() ?? null });
+    return await db.$transaction(async (tx) => {
+      const acquired = await acquirePlanWriteGuard(tx, id);
+      const session = await tx.testSession.findUnique({ where: { id }, include: { plan: { include: { checks: true, run: true } } } });
+      const plan = session?.plan;
+      if (!plan || session.generationStatus !== "SUCCEEDED") return null;
+      if (plan.run) return TestRunSchema.parse({ ...plan.run, startedAt: plan.run.startedAt.toISOString(), completedAt: plan.run.completedAt?.toISOString() ?? null });
+      if (!acquired) return null;
+      if (!plan.checks.some((check) => check.excludedAt === null)) throw new PlanStartError("empty-scope");
+      const run = await tx.testRun.create({ data: { planId: plan.id } });
+      return TestRunSchema.parse({ ...run, startedAt: run.startedAt.toISOString(), completedAt: null });
+    });
   } catch (error) {
-    if (isUniqueConflict(error)) {
-      const run = await db.testRun.findUniqueOrThrow({ where: { planId: session.plan.id } });
-      return TestRunSchema.parse({ ...run, startedAt: run.startedAt.toISOString(), completedAt: run.completedAt?.toISOString() ?? null });
-    }
+    if (isPlanWriteBusy(error)) throw new PlanStartError("busy");
     throw error;
   }
 }

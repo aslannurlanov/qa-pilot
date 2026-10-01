@@ -43,6 +43,7 @@ export async function createOrOpenBugReport(db: PrismaClient, sessionId: string,
         expectedResult: source.check.expectedResult, reason: source.check.reason, basis: source.check.basis,
         ...(source.check.sourceRefsJson ? { sourceRefs: JSON.parse(source.check.sourceRefsJson) } : {}),
         excludedAt: source.check.excludedAt?.toISOString() ?? null,
+        origin: source.check.origin, editedAt: source.check.editedAt?.toISOString() ?? null,
       });
       const result = CheckResultSchema.parse({
         id: source.id, runId: source.runId, planId: source.planId, checkId: source.checkId,

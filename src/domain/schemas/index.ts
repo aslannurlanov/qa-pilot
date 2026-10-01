@@ -4,3 +4,4 @@ export * from "./plan";
 export * from "./execution";
 export * from "./attachment";
 export * from "./bug-report";
+export * from "./plan-review";

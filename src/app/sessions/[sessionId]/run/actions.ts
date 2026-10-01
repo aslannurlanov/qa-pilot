@@ -5,18 +5,21 @@ import { IdSchema } from "@/domain/schemas";
 import { createDatabaseClient } from "@/server/db";
 import { recordCheckResult, ResultInputSchema, startOrResumeRun } from "@/server/services/execute-test-plan";
 
+import { PlanStartError } from "@/server/services/plan-write-guard";
+import { reviewMessages } from "@/domain/schemas/plan-review";
+
 export type ResultActionState = { message?: string; outcome?: "FAIL" | "BLOCKED" };
 
-export async function startTesting(formData: FormData) {
+export async function startReviewedTesting(_previous: { message?: string }, formData: FormData): Promise<{ message?: string }> {
   const id = IdSchema.safeParse(formData.get("sessionId"));
-  if (!id.success) redirect("/");
+  if (!id.success) return { message: reviewMessages["missing-plan"] };
   const db = createDatabaseClient();
   try {
     const run = await startOrResumeRun(db, id.data);
-    if (!run) redirect(`/sessions/${id.data}`);
-  } finally {
-    await db.$disconnect();
-  }
+    if (!run) return { message: reviewMessages["missing-plan"] };
+  } catch (error) {
+    return { message: error instanceof PlanStartError ? reviewMessages[error.code] : "Не удалось начать тестирование. Попробуйте позже." };
+  } finally { await db.$disconnect(); }
   redirect(`/sessions/${id.data}/run`);
 }
 
